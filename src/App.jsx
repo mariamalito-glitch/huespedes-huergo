@@ -41,10 +41,7 @@ const C = {
   green:"#2E7D32", greenBg:"#E8F5E9", amber:"#B45309", amberBg:"#FEF3C7",
   red:"#B71C1C", redBg:"#FFEBEE", gray:"#555E6B", grayBg:"#F1F3F5",
   border:"#DDE2EA", text:"#1A1F2B", textSec:"#5A6270", textTer:"#8C95A0", cardGray:"#E8ECF0",
-  // Colores de estado para globos de huéspedes
-  checkinBg:"#1A3A6B",   // azul oscuro
-  inhouseBg:"#1B5E20",   // verde oscuro
-  checkoutBg:"#7B1515",  // rojo oscuro
+  checkinBg:"#1A3A6B", inhouseBg:"#1B5E20", checkoutBg:"#7B1515",
 };
 const S = {
   input:{ width:"100%", boxSizing:"border-box", fontSize:14, padding:"8px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:C.white, color:C.text },
@@ -98,12 +95,11 @@ function Field({ label, children }) {
     {children}
   </div>;
 }
-function Toast({ msg }) {
+function Toast({ msg, isError }) {
   if (!msg) return null;
-  return <div style={{ background:C.greenBg, color:C.green, border:`1px solid #A5D6A7`, padding:"10px 1.5rem", fontSize:13, fontWeight:500 }}>{msg}</div>;
+  return <div style={{ background: isError ? C.amberBg : C.greenBg, color: isError ? C.amber : C.green, border:`1px solid ${isError ? "#FCD34D" : "#A5D6A7"}`, padding:"10px 1.5rem", fontSize:13, fontWeight:500 }}>{msg}</div>;
 }
 
-// ── Globo de huésped con color según estado ───────────────────────────────────
 function HuespedGlobo({ h, fecha, showId=false }) {
   const status = getHuespedStatus(h, fecha);
   const bg = huespedBg(status);
@@ -112,13 +108,17 @@ function HuespedGlobo({ h, fecha, showId=false }) {
     <div style={{ background:bg, borderRadius:10, padding:"10px 14px" }}>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8 }}>
         <div style={{ flex:1 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
             <span style={{ fontWeight:700, fontSize:14, color:"#fff" }}>{h.nombre} {h.apellido}</span>
             <span style={{ fontSize:11, fontWeight:700, background:lbl.bg, color:lbl.color, padding:"2px 8px", borderRadius:12 }}>{lbl.text}</span>
           </div>
-          <div style={{ fontSize:12, color:"rgba(255,255,255,0.65)", display:"flex", flexWrap:"wrap", gap:6 }}>
-            {showId && h.id && <span style={{ background:"rgba(255,255,255,0.15)", padding:"1px 7px", borderRadius:5, color:"rgba(255,255,255,0.9)", fontWeight:600 }}>DNI: {h.id}</span>}
-            {h.horaIngreso && <span>Ingreso: {h.horaIngreso}</span>}
+          <div style={{ fontSize:12, color:"rgba(255,255,255,0.75)", display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
+            {/* ID siempre visible */}
+            {h.id && !h.id.startsWith("h")
+              ? <span style={{ background:"rgba(255,255,255,0.22)", padding:"2px 8px", borderRadius:5, color:"#fff", fontWeight:700 }}>🪪 {h.id}</span>
+              : <span style={{ color:"rgba(255,255,255,0.4)", fontStyle:"italic", fontSize:11 }}>Sin ID</span>
+            }
+            {h.horaIngreso && <span>· Ingreso: {h.horaIngreso}</span>}
           </div>
         </div>
         <div style={{ textAlign:"right", whiteSpace:"nowrap" }}>
@@ -159,12 +159,6 @@ function Login({ onLogin }) {
   );
 }
 
-const memStore = {};
-const storage = {
-  get: async k => { try { const v=localStorage.getItem(k); return v?{value:v}:null; } catch { return memStore[k]?{value:memStore[k]}:null; } },
-  set: async (k,v) => { try { localStorage.setItem(k,v); } catch {} memStore[k]=v; },
-};
-
 export default function App() {
   const [userRole, setUserRole] = useState("general");
   const [tab, setTab] = useState("deptos");
@@ -176,27 +170,36 @@ export default function App() {
   const [showAddH, setShowAddH] = useState(false);
   const [showImportH, setShowImportH] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showConfirmBorrar, setShowConfirmBorrar] = useState(false);
+  const [showCSVModal, setShowCSVModal] = useState(null);
   const [importMsg, setImportMsg] = useState("");
+  const [importError, setImportError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const fileDRef = useRef();
 
   useEffect(() => {
     async function load() {
-      try { const d=await storage.get(STORAGE_KEYS.deptos); if(d) setDeptos(JSON.parse(d.value)); } catch {}
-      try { const h=await storage.get(STORAGE_KEYS.huespedes); if(h) setHuespedes(JSON.parse(h.value)); } catch {}
-      try { const r=await storage.get(STORAGE_KEYS.registros); if(r) setRegistros(JSON.parse(r.value)); } catch {}
+      try { const d=await window.storage.get(STORAGE_KEYS.deptos, true); if(d) setDeptos(JSON.parse(d.value)); } catch {}
+      try { const h=await window.storage.get(STORAGE_KEYS.huespedes, true); if(h) setHuespedes(JSON.parse(h.value)); } catch {}
+      try { const r=await window.storage.get(STORAGE_KEYS.registros, true); if(r) setRegistros(JSON.parse(r.value)); } catch {}
       setLoading(false);
     }
     load();
   }, []);
 
-  const persist = async (key,val) => { try { await storage.set(key,JSON.stringify(val)); } catch {} };
-  const setD = v => { setDeptos(v); persist(STORAGE_KEYS.deptos,v); };
-  const setH = v => { setHuespedes(v); persist(STORAGE_KEYS.huespedes,v); };
-  const setR = v => { setRegistros(v); persist(STORAGE_KEYS.registros,v); };
+  const persist = async (key,val) => { try { await window.storage.set(key, JSON.stringify(val), true); } catch {} };
+  const setD = v => { setDeptos(v); persist(STORAGE_KEYS.deptos, v); };
+  const setH = v => { setHuespedes(v); persist(STORAGE_KEYS.huespedes, v); };
+  const setR = v => { setRegistros(v); persist(STORAGE_KEYS.registros, v); };
   const updateReg = (hid,patch) => { const u={...registros,[hid]:{...(registros[hid]||{}),...patch}}; setR(u); };
-  const toast = msg => { setImportMsg(msg); setTimeout(()=>setImportMsg(""),4000); };
+
+  const toast = (msg, isError=false) => {
+    setImportError(isError);
+    setImportMsg(msg);
+    setTimeout(() => setImportMsg(""), 5000);
+  };
+
   const isAdmin = userRole==="admin";
 
   function importDeptos(text) {
@@ -209,32 +212,72 @@ export default function App() {
     setD(list); toast(`✓ ${list.length} departamentos cargados.`);
   }
 
+  function parseHuesped(r, i) {
+    const nombreCompleto = findField(r,["nombre_y_apellido","nombre_apellido"]);
+    let nombre="", apellido="";
+    if (nombreCompleto) {
+      const p = nombreCompleto.trim().split(/\s+/);
+      nombre = p[0]||""; apellido = p.slice(1).join(" ")||"";
+    } else {
+      nombre = findField(r,["nombre","name","first"]);
+      apellido = findField(r,["apellido","last","surname"]);
+    }
+    // ID: buscar columna exacta "id" primero
+    const keys = Object.keys(r);
+    const idKey = keys.find(k => k === "id") || keys.find(k => k.startsWith("id"));
+    const docId = (idKey && r[idKey]) ? r[idKey] : findField(r,["dni","pasaporte","documento","passport","doc"]);
+
+    const rawIngreso = findField(r,["fecha_ingreso","fecha_de_ingreso","ingreso","checkin","check_in","entrada","from","inicio"]);
+    const rawSalida  = findField(r,["fecha_salida","fecha_de_salida","salida","checkout","check_out","hasta","to","fin"]);
+    const horaIngreso = findField(r,["hora_ingreso","hora_de_ingreso","hora"]);
+    const cocheraRaw  = findField(r,["usa_cochera","cochera"]);
+    const patente     = findField(r,["patente"]);
+    const vehiculo    = findField(r,["marca_o_modelo","modelo","vehiculo","auto"]);
+    const cochera = (cocheraRaw&&cocheraRaw!=="0"&&cocheraRaw.toLowerCase()!=="false") ? cocheraRaw : "";
+    return {
+      id: docId || `h${Date.now()}${i}`,
+      nombre, apellido,
+      depto: String(findField(r,["depto","dept","apartamento","apt","habitacion","unit"])||"").replace(/\.0$/,""),
+      ingreso: toISODate(rawIngreso), salida: toISODate(rawSalida),
+      horaIngreso: horaIngreso||"", cochera,
+      patente: patente&&patente!=="0"?patente:"",
+      vehiculo: vehiculo&&vehiculo!=="0"?vehiculo:"",
+    };
+  }
+
   function importHuespedes(text, replace=false) {
     const {rows} = parseCSV(text);
-    const mapped = rows.map((r,i) => {
-      const nombreCompleto = findField(r,["nombre_y_apellido","nombre_apellido","nombre"]);
-      let nombre="", apellido="";
-      if (nombreCompleto) { const p=nombreCompleto.trim().split(/\s+/); nombre=p[0]||""; apellido=p.slice(1).join(" ")||""; }
-      else { nombre=findField(r,["nombre","name","first"]); apellido=findField(r,["apellido","last","surname"]); }
-      const rawIngreso = findField(r,["fecha_ingreso","fecha_de_ingreso","ingreso","checkin","check_in","entrada","from","inicio"]);
-      const rawSalida  = findField(r,["fecha_salida","fecha_de_salida","salida","checkout","check_out","hasta","to","fin"]);
-      const horaIngreso = findField(r,["hora_ingreso","hora_de_ingreso","hora"]);
-      const cocheraRaw  = findField(r,["usa_cochera","cochera"]);
-      const patente     = findField(r,["patente"]);
-      const vehiculo    = findField(r,["marca_o_modelo","modelo","vehiculo","auto"]);
-      const cochera = (cocheraRaw&&cocheraRaw!=="0"&&cocheraRaw.toLowerCase()!=="false") ? cocheraRaw : "";
-      return {
-        id: findField(r,["id"])||`h${Date.now()}${i}`,
-        nombre, apellido,
-        depto: String(findField(r,["depto","dept","apartamento","apt","habitacion","unit"])||"").replace(/\.0$/,""),
-        ingreso: toISODate(rawIngreso), salida: toISODate(rawSalida),
-        horaIngreso: horaIngreso||"", cochera,
-        patente: patente&&patente!=="0"?patente:"",
-        vehiculo: vehiculo&&vehiculo!=="0"?vehiculo:"",
-      };
-    }).filter(r=>r.nombre||r.apellido);
-    setH(replace?mapped:[...huespedes,...mapped]);
-    toast(`✓ ${mapped.length} huéspedes ${replace?"reemplazados":"agregados"}.`);
+    const incoming = rows.map((r,i) => parseHuesped(r,i)).filter(r=>r.nombre||r.apellido);
+
+    if (replace) {
+      setH(incoming);
+      toast(`✓ ${incoming.length} huéspedes cargados.`);
+      return;
+    }
+
+    // Detectar duplicados por ID (solo los que tienen ID real, no generado)
+    const existingIds = new Set(huespedes.filter(h => !h.id.startsWith("h")).map(h => h.id));
+    const nuevos = [];
+    const duplicados = [];
+    incoming.forEach(h => {
+      if (!h.id.startsWith("h") && existingIds.has(h.id)) {
+        duplicados.push(h);
+      } else {
+        nuevos.push(h);
+      }
+    });
+
+    if (nuevos.length === 0) {
+      toast(`⚠️ No se agregaron huéspedes: los ${duplicados.length} del CSV ya estaban cargados.`, true);
+      return;
+    }
+
+    setH([...huespedes, ...nuevos]);
+    if (duplicados.length > 0) {
+      toast(`✓ ${nuevos.length} huésped(es) agregado(s). Se omitieron ${duplicados.length} duplicado(s).`, false);
+    } else {
+      toast(`✓ ${nuevos.length} huésped(es) agregado(s).`);
+    }
   }
 
   function huespedesEnFecha(fecha) {
@@ -255,17 +298,13 @@ export default function App() {
     return "libre";
   }
 
-  function downloadInhouse() {
-    const inhouse = huespedesEnFecha(viewDate);
-    if (!inhouse.length) { toast("No hay huéspedes para esta fecha."); return; }
+  function generarCSV() {
+    const lista = huespedesEnFecha(viewDate);
+    if (!lista.length) { toast("No hay huéspedes para esta fecha.", true); return; }
     const cols = ["Depto","Nombre","Apellido","ID/DNI","Ingreso","Salida","Hora Ingreso","Cochera","Patente","Vehículo","Estado"];
-    const rows = inhouse.map(h=>[h.depto,h.nombre,h.apellido,h.id,fmtDate(h.ingreso),fmtDate(h.salida),h.horaIngreso||"",h.cochera||"",h.patente||"",h.vehiculo||"",getHuespedStatus(h,viewDate)]);
-    const csv = [cols,...rows].map(r=>r.map(v=>`"${(v||"").toString().replace(/"/g,'""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv],{type:"text/csv;charset=utf-8;"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href=url; a.download=`inhouse_${viewDate}.csv`; a.click();
-    URL.revokeObjectURL(url);
-    toast(`✓ Descargado: ${inhouse.length} huéspedes.`);
+    const rows = lista.map(h=>[h.depto,h.nombre,h.apellido,h.id.startsWith("h")?"":h.id,fmtDate(h.ingreso),fmtDate(h.salida),h.horaIngreso||"",h.cochera||"",h.patente||"",h.vehiculo||"",getHuespedStatus(h,viewDate)]);
+    const csv = [cols,...rows].map(r=>r.join(",")).join("\n");
+    setShowCSVModal({ csv, fecha: viewDate, count: lista.length });
   }
 
   if (showAdminLogin) return <Login onLogin={role=>{setUserRole(role);setShowAdminLogin(false);setTab("admin");}} />;
@@ -313,14 +352,13 @@ export default function App() {
         </div>
       </div>
 
-      <Toast msg={importMsg} />
+      <Toast msg={importMsg} isError={importError} />
       <div style={{ padding:"1.5rem" }}>
 
         {/* ── DEPARTAMENTOS ── */}
         {tab==="deptos" && (
           <div>
             <SectionHeader title="Departamentos" subtitle={`Estado al día de hoy · ${deptos.length} departamentos`} />
-            {/* leyenda colores */}
             <div style={{ display:"flex", gap:8, marginBottom:"1rem", flexWrap:"wrap", alignItems:"center" }}>
               <input placeholder="🔍  Buscar..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...S.input, width:220, flex:"0 0 auto" }} />
               <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
@@ -343,11 +381,10 @@ export default function App() {
                   const statusColor = status==="ocupado"?"green":status==="proximo"?"amber":"gray";
                   return (
                     <div key={d.id} onClick={()=>setSelectedDepto(d)}
-                      style={{ ...S.card, background:C.cardGray, cursor:"pointer", padding:"14px 16px", transition:"box-shadow 0.15s" }}
+                      style={{ ...S.card, background:C.cardGray, cursor:"pointer", padding:"14px 16px" }}
                       onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,0.10)"}
                       onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}
                     >
-                      {/* header del depto */}
                       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:hList.length>0?12:0 }}>
                         <div style={{ minWidth:90 }}>
                           <div style={{ fontWeight:700, fontSize:16, color:C.navy }}>{d.nombre||d.id}</div>
@@ -362,7 +399,6 @@ export default function App() {
                           <span style={{ color:C.textTer, fontSize:18 }}>›</span>
                         </div>
                       </div>
-                      {/* globos de huéspedes con color según estado */}
                       {hList.length>0 && (
                         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                           {hList.map(h => <HuespedGlobo key={h.id} h={h} fecha={TODAY} />)}
@@ -380,7 +416,6 @@ export default function App() {
         {tab==="huespedes" && (
           <div>
             <SectionHeader title="Huéspedes por día" subtitle="Vista de todos los departamentos ocupados en la fecha seleccionada" />
-            {/* panel selector */}
             <div style={{ ...S.card, display:"flex", alignItems:"center", gap:16, marginBottom:"1.5rem", flexWrap:"wrap", background:C.accentLight, borderColor:"#C3D5F5" }}>
               <div>
                 <div style={{ fontSize:12, fontWeight:600, color:C.accent, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>Fecha</div>
@@ -388,10 +423,10 @@ export default function App() {
               </div>
               <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
                 {[
-                  {label:"total alojados", val:hoyEnFecha.length, color:C.navy},
-                  {label:"check-in",       val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkin").length,  color:C.accent},
-                  {label:"in-house",       val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="inhouse").length,  color:C.green},
-                  {label:"check-out",      val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkout").length, color:C.red},
+                  {label:"total", val:hoyEnFecha.length, color:C.navy},
+                  {label:"check-in", val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkin").length, color:C.accent},
+                  {label:"in-house", val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="inhouse").length, color:C.green},
+                  {label:"check-out", val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkout").length, color:C.red},
                 ].map(s=>(
                   <div key={s.label} style={{ textAlign:"center" }}>
                     <div style={{ fontSize:24, fontWeight:800, color:s.color }}>{s.val}</div>
@@ -400,17 +435,14 @@ export default function App() {
                 ))}
               </div>
               <div style={{ marginLeft:"auto" }}>
-                <button onClick={downloadInhouse} style={{ ...S.btnPrimary, display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap" }}>⬇ Descargar CSV</button>
+                <button onClick={generarCSV} style={{ ...S.btnPrimary, display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap" }}>⬇ Descargar listado</button>
               </div>
             </div>
-
-            {/* leyenda */}
             <div style={{ display:"flex", gap:10, marginBottom:"1.25rem", flexWrap:"wrap" }}>
               <span style={{ fontSize:12, fontWeight:600, background:C.accentLight, color:C.accent, padding:"4px 12px", borderRadius:20 }}>🔵 Check-in hoy</span>
               <span style={{ fontSize:12, fontWeight:600, background:C.greenBg, color:C.green, padding:"4px 12px", borderRadius:20 }}>🟢 In-house</span>
               <span style={{ fontSize:12, fontWeight:600, background:C.redBg, color:C.red, padding:"4px 12px", borderRadius:20 }}>🔴 Check-out hoy</span>
             </div>
-
             {hoyEnFecha.length===0 ? (
               <div style={{ ...S.card, textAlign:"center", padding:"3rem", color:C.textSec, fontSize:14 }}>Sin huéspedes alojados para esta fecha.</div>
             ) : (() => {
@@ -420,7 +452,6 @@ export default function App() {
               return (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:14 }}>
                   {entries.map(([dep,hs])=>{
-                    // borde del card según estado predominante
                     const hasCheckout = hs.some(h=>getHuespedStatus(h,viewDate)==="checkout");
                     const hasCheckin  = hs.some(h=>getHuespedStatus(h,viewDate)==="checkin");
                     const cardBorder  = hasCheckout?C.red:hasCheckin?C.accent:C.green;
@@ -463,12 +494,14 @@ export default function App() {
                   <button onClick={()=>setShowImportH("add")} style={{ ...S.btnSecondary, width:"100%" }}>＋ Agregar CSV</button>
                   <button onClick={()=>setShowImportH("replace")} style={{ ...S.btnSecondary, width:"100%" }}>↺ Reemplazar CSV</button>
                   <button onClick={()=>setShowAddH(true)} style={{ ...S.btnPrimary, width:"100%" }}>+ Agregar manualmente</button>
+                  <button onClick={()=>setShowConfirmBorrar(true)} style={{ ...S.btnDanger, width:"100%", padding:"9px 18px", fontSize:14, fontWeight:600 }}>🗑 Borrar todos los huéspedes</button>
                 </div>
                 <div style={{ fontSize:11, color:C.textTer, marginTop:8 }}>
                   Columnas: Nombre y Apellido · Depto · Fecha Ingreso · Fecha Salida · ID · Hora ingreso · Usa Cochera · Patente · Marca o Modelo
                 </div>
               </div>
             </div>
+
             <div style={{ fontWeight:700, fontSize:16, color:C.navy, marginBottom:"1rem" }}>Listado de huéspedes</div>
             {huespedes.length===0 ? (
               <div style={{ ...S.card, textAlign:"center", padding:"2rem", color:C.textSec, fontSize:14 }}>Sin datos.</div>
@@ -476,11 +509,13 @@ export default function App() {
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 {huespedes.map(h=>(
                   <div key={h.id} style={{ ...S.card, display:"flex", gap:10, alignItems:"center", padding:"10px 14px", flexWrap:"wrap" }}>
-                    <div style={{ fontSize:11, color:C.textTer, minWidth:60 }}>#{h.id}</div>
+                    <div style={{ background: h.id.startsWith("h") ? C.grayBg : C.accentLight, color: h.id.startsWith("h") ? C.textTer : C.accent, fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:6, whiteSpace:"nowrap" }}>
+                      🪪 {h.id.startsWith("h") ? "Sin ID" : h.id}
+                    </div>
                     <div style={{ flex:1, fontWeight:600, fontSize:14 }}>{h.nombre} {h.apellido}</div>
                     <Badge color="blue">Depto {h.depto}</Badge>
                     <div style={{ fontSize:12, color:C.textSec }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
-                    {h.cochera && <Badge color="gray">🚗 Cochera {h.cochera}</Badge>}
+                    {h.cochera && <Badge color="gray">🚗 {h.cochera}</Badge>}
                     <button onClick={()=>setH(huespedes.filter(x=>x.id!==h.id))} style={S.btnDanger}>Eliminar</button>
                   </div>
                 ))}
@@ -489,6 +524,19 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* MODAL: confirmar borrar todos */}
+      {showConfirmBorrar && (
+        <Modal title="⚠️ Confirmar borrado" onClose={()=>setShowConfirmBorrar(false)}>
+          <p style={{ fontSize:14, color:C.text, marginTop:0 }}>
+            Estás por eliminar <b>todos los huéspedes</b> ({huespedes.length} registros). Esta acción no se puede deshacer.
+          </p>
+          <div style={{ display:"flex", gap:10, marginTop:8 }}>
+            <button onClick={()=>setShowConfirmBorrar(false)} style={{ ...S.btnSecondary, flex:1 }}>Cancelar</button>
+            <button onClick={()=>{ setH([]); setShowConfirmBorrar(false); toast("✓ Todos los huéspedes fueron eliminados."); }} style={{ ...S.btnDanger, flex:1, padding:"9px 18px", fontSize:14, fontWeight:600 }}>Sí, borrar todo</button>
+          </div>
+        </Modal>
+      )}
 
       {/* MODAL: detalle depto */}
       {selectedDepto && (() => {
@@ -546,7 +594,7 @@ export default function App() {
                     style={S.input} type={k==="ingreso"||k==="salida"?"date":k==="horaIngreso"?"time":"text"} />
                 </Field>
               ))}
-              <button onClick={()=>{setH([...huespedes,{...form,id:form.id||`h${Date.now()}`}]);setShowAddH(false);}}
+              <button onClick={()=>{ setH([...huespedes,{...form,id:form.id||`h${Date.now()}`}]); setShowAddH(false); }}
                 style={{ ...S.btnPrimary, width:"100%", marginTop:8 }}>Guardar huésped</button>
             </Modal>
           );
@@ -558,7 +606,9 @@ export default function App() {
       {showImportH && (
         <Modal title={showImportH==="replace"?"Reemplazar huéspedes (CSV)":"Agregar huéspedes (CSV)"} onClose={()=>setShowImportH(false)}>
           <p style={{ fontSize:13, color:C.textSec, marginTop:0 }}>
-            {showImportH==="replace"?"⚠️ Esto reemplazará todos los huéspedes actuales.":"Los del CSV se sumarán a los existentes."}
+            {showImportH==="replace"
+              ? "⚠️ Esto reemplazará todos los huéspedes actuales."
+              : "Solo se agregarán los huéspedes nuevos. Los que ya existan (mismo ID) se omitirán automáticamente."}
           </p>
           <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", fontSize:12, color:C.textSec, marginBottom:14 }}>
             <b>Columnas reconocidas:</b><br/>
@@ -569,6 +619,20 @@ export default function App() {
             const r=new FileReader(); r.onload=ev=>{importHuespedes(ev.target.result,showImportH==="replace");setShowImportH(false);}; r.readAsText(f);
           }} style={{ fontSize:14, marginBottom:12 }} />
           <button onClick={()=>setShowImportH(false)} style={{ ...S.btnSecondary, width:"100%", marginTop:8 }}>Cancelar</button>
+        </Modal>
+      )}
+
+      {/* MODAL: CSV listado del día */}
+      {showCSVModal && (
+        <Modal title={`📋 Listado ${showCSVModal.fecha} · ${showCSVModal.count} huéspedes`} onClose={()=>setShowCSVModal(null)}>
+          <p style={{ fontSize:13, color:C.textSec, margin:"0 0 10px" }}>
+            Copiá el contenido y pegalo en Excel o Google Sheets.
+          </p>
+          <textarea readOnly value={showCSVModal.csv} onFocus={e=>e.target.select()}
+            style={{ ...S.input, fontFamily:"monospace", fontSize:11, minHeight:240, resize:"vertical", background:C.bg }} />
+          <button onClick={()=>{ navigator.clipboard.writeText(showCSVModal.csv); toast("✓ Copiado al portapapeles"); }}
+            style={{ ...S.btnPrimary, width:"100%", marginTop:10 }}>📋 Copiar al portapapeles</button>
+          <button onClick={()=>setShowCSVModal(null)} style={{ ...S.btnSecondary, width:"100%", marginTop:8 }}>Cerrar</button>
         </Modal>
       )}
     </div>
