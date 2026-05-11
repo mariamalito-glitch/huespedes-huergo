@@ -1,11 +1,9 @@
 import { useState, useEffect, useRef } from "react"
-import { storage } from "./useStorage"
 
 const STORAGE_KEYS = { deptos: "huesped_deptos", huespedes: "huesped_data", registros: "huesped_registros" }
-const ADMIN_PASS = import.meta.env.VITE_ADMIN_PASSWORD || "admin123"
+const ADMIN_PASS = "admin123"
 const TODAY = new Date().toISOString().slice(0, 10)
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function parseCSVLine(line) {
   const result = []; let cur = ""; let inQ = false
   for (let c of line) {
@@ -13,8 +11,7 @@ function parseCSVLine(line) {
     else if (c === ',' && !inQ) { result.push(cur.trim()); cur = "" }
     else cur += c
   }
-  result.push(cur.trim())
-  return result
+  result.push(cur.trim()); return result
 }
 function parseCSV(text) {
   const lines = text.split(/\r?\n/).filter(l => l.trim())
@@ -23,16 +20,14 @@ function parseCSV(text) {
   return {
     headers,
     rows: lines.slice(1).map(l => {
-      const vals = parseCSVLine(l)
-      const obj = {}
+      const vals = parseCSVLine(l); const obj = {}
       headers.forEach((h, i) => obj[h] = (vals[i] || "").trim())
       return obj
     }).filter(r => Object.values(r).some(v => v))
   }
 }
 function toISODate(str) {
-  if (!str) return ""
-  const d = str.trim()
+  if (!str) return ""; const d = str.trim()
   const m1 = d.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/)
   if (m1) return `${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`
   const m2 = d.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/)
@@ -48,17 +43,15 @@ function findField(obj, candidates) {
   return ""
 }
 function fmtDate(iso) {
-  if (!iso) return "—"
-  const [y, m, d] = iso.split("-")
-  return `${d}/${m}/${y}`
+  if (!iso) return "—"; const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`
 }
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
 const C = {
   bg: "#F4F6F9", white: "#FFFFFF", navy: "#1B2A4A", accent: "#3B6FD4", accentLight: "#EBF0FA",
   green: "#2E7D32", greenBg: "#E8F5E9", amber: "#B45309", amberBg: "#FEF3C7",
   red: "#B71C1C", redBg: "#FFEBEE", gray: "#555E6B", grayBg: "#F1F3F5",
   border: "#DDE2EA", text: "#1A1F2B", textSec: "#5A6270", textTer: "#8C95A0",
+  cardGray: "#E8ECF0",
 }
 const S = {
   input: { width: "100%", boxSizing: "border-box", fontSize: 14, padding: "8px 12px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.white, color: C.text },
@@ -107,7 +100,7 @@ function Toast({ msg }) {
   return <div style={{ background: C.greenBg, color: C.green, border: `1px solid #A5D6A7`, padding: "10px 1.5rem", fontSize: 13, fontWeight: 500 }}>{msg}</div>
 }
 
-// ── Tarjeta de huésped ────────────────────────────────────────────────────────
+// ── Tarjeta de huésped (fondo oscuro, dentro del card del depto) ──
 function HuespedCard({ h, index, total, showId = false }) {
   const colors = ["#1B2A4A", "#2D4070", "#3B5C9E"]
   const bg = colors[index % colors.length]
@@ -130,9 +123,9 @@ function HuespedCard({ h, index, total, showId = false }) {
           <div style={{ fontSize: 12, color: "rgba(255,255,255,0.9)", fontWeight: 500 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
         </div>
       </div>
-      {(h.usaCochera || h.patente || h.vehiculo) && (
+      {(h.cochera || h.patente || h.vehiculo) && (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 7 }}>
-          {h.usaCochera && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>🚗 Cochera</span>}
+          {h.cochera && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>🚗 Cochera {h.cochera}</span>}
           {h.patente && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>Patente: {h.patente}</span>}
           {h.vehiculo && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>{h.vehiculo}</span>}
         </div>
@@ -141,10 +134,15 @@ function HuespedCard({ h, index, total, showId = false }) {
   )
 }
 
-// ── LOGIN admin ───────────────────────────────────────────────────────────────
+// ── Mini badge de estado coloreado ──
+function StatusPill({ status }) {
+  if (status === "checkin")  return <span style={{ background: C.accentLight, color: C.accent, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>✓ Check-in</span>
+  if (status === "checkout") return <span style={{ background: C.redBg, color: C.red, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>↑ Check-out</span>
+  return <span style={{ background: C.greenBg, color: C.green, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>● In-house</span>
+}
+
 function Login({ onLogin }) {
-  const [pass, setPass] = useState("")
-  const [err, setErr] = useState("")
+  const [pass, setPass] = useState(""); const [err, setErr] = useState("")
   const submit = () => { pass === ADMIN_PASS ? onLogin("admin") : setErr("Contraseña incorrecta.") }
   return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -165,7 +163,13 @@ function Login({ onLogin }) {
   )
 }
 
-// ── MAIN APP ──────────────────────────────────────────────────────────────────
+// ── Storage helpers (in-memory fallback) ──
+const memStore = {}
+const storage = {
+  get: async (k) => { try { const v = localStorage.getItem(k); return v ? { value: v } : null } catch { return memStore[k] ? { value: memStore[k] } : null } },
+  set: async (k, v) => { try { localStorage.setItem(k, v) } catch {} memStore[k] = v },
+}
+
 export default function App() {
   const [userRole, setUserRole] = useState("general")
   const [tab, setTab] = useState("deptos")
@@ -198,7 +202,6 @@ export default function App() {
   const setR = v => { setRegistros(v); persist(STORAGE_KEYS.registros, v) }
   const updateReg = (hid, patch) => { const u = { ...registros, [hid]: { ...(registros[hid] || {}), ...patch } }; setR(u) }
   const toast = msg => { setImportMsg(msg); setTimeout(() => setImportMsg(""), 4000) }
-
   const isAdmin = userRole === "admin"
 
   function importDeptos(text) {
@@ -208,8 +211,7 @@ export default function App() {
       nombre: findField(r, ["nombre", "name", "descripcion", "depto", "apt"]) || findField(r, [Object.keys(r)[0]]),
       piso: findField(r, ["piso", "floor", "nivel"]),
     })).filter(r => r.id || r.nombre).map(d => ({ ...d, id: d.id || d.nombre }))
-    setD(list)
-    toast(`✓ ${list.length} departamentos cargados.`)
+    setD(list); toast(`✓ ${list.length} departamentos cargados.`)
   }
 
   function importHuespedes(text, replace = false) {
@@ -219,8 +221,7 @@ export default function App() {
       let nombre = "", apellido = ""
       if (nombreCompleto) {
         const parts = nombreCompleto.trim().split(/\s+/)
-        nombre = parts[0] || ""
-        apellido = parts.slice(1).join(" ") || ""
+        nombre = parts[0] || ""; apellido = parts.slice(1).join(" ") || ""
       } else {
         nombre = findField(r, ["nombre", "name", "first"])
         apellido = findField(r, ["apellido", "last", "surname"])
@@ -228,17 +229,22 @@ export default function App() {
       const rawIngreso = findField(r, ["fecha_ingreso", "fecha_de_ingreso", "ingreso", "checkin", "check_in", "entrada", "from", "inicio"])
       const rawSalida  = findField(r, ["fecha_salida", "fecha_de_salida", "salida", "checkout", "check_out", "hasta", "to", "fin"])
       const horaIngreso = findField(r, ["hora_ingreso", "hora_de_ingreso", "hora"])
-      const usaCochera  = findField(r, ["usa_cochera", "cochera"])
-      const patente     = findField(r, ["patente"])
-      const vehiculo    = findField(r, ["marca_o_modelo", "modelo", "vehiculo", "auto"])
+      // usa_cochera ahora puede ser número de cochera asignada
+      const cocheraRaw = findField(r, ["usa_cochera", "cochera"])
+      const patente    = findField(r, ["patente"])
+      const vehiculo   = findField(r, ["marca_o_modelo", "modelo", "vehiculo", "auto"])
+      // Si es número → número de cochera; si es true/false/0/1 → booleano
+      let cochera = ""
+      if (cocheraRaw && cocheraRaw !== "0" && cocheraRaw.toLowerCase() !== "false") {
+        cochera = cocheraRaw // guardamos el valor crudo (puede ser "5", "A3", etc.)
+      }
       return {
         id: findField(r, ["id"]) || `h${Date.now()}${i}`,
         nombre, apellido,
         depto: String(findField(r, ["depto", "dept", "apartamento", "apt", "habitacion", "unit"]) || "").replace(/\.0$/, ""),
-        ingreso: toISODate(rawIngreso),
-        salida: toISODate(rawSalida),
+        ingreso: toISODate(rawIngreso), salida: toISODate(rawSalida),
         horaIngreso: horaIngreso || "",
-        usaCochera: usaCochera && usaCochera !== "0" && usaCochera.toLowerCase() !== "false" ? true : false,
+        cochera,
         patente: patente && patente !== "0" ? patente : "",
         vehiculo: vehiculo && vehiculo !== "0" ? vehiculo : "",
       }
@@ -265,10 +271,36 @@ export default function App() {
     return "libre"
   }
 
+  // ── Calcular estado check-in/checkout/inhouse para una fecha ──
+  function getHuespedStatus(h, fecha) {
+    if (h.ingreso === fecha && h.salida === fecha) return "checkin"
+    if (h.salida === fecha) return "checkout"
+    if (h.ingreso === fecha) return "checkin"
+    return "inhouse"
+  }
+
+  // ── Descargar in-house del día como CSV ──
+  function downloadInhouse() {
+    const fecha = viewDate
+    const inhouse = huespedesEnFecha(fecha).filter(h => getHuespedStatus(h, fecha) === "inhouse")
+    if (inhouse.length === 0) { toast("No hay huéspedes in-house para esta fecha."); return }
+    const cols = ["Depto", "Nombre", "Apellido", "ID/DNI", "Ingreso", "Salida", "Hora Ingreso", "Cochera", "Patente", "Vehículo"]
+    const rows = inhouse.map(h => [
+      h.depto, h.nombre, h.apellido, h.id,
+      fmtDate(h.ingreso), fmtDate(h.salida), h.horaIngreso || "",
+      h.cochera || "", h.patente || "", h.vehiculo || ""
+    ])
+    const csv = [cols, ...rows].map(r => r.map(v => `"${(v||"").toString().replace(/"/g,'""')}"`).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href = url; a.download = `inhouse_${fecha}.csv`; a.click()
+    URL.revokeObjectURL(url)
+    toast(`✓ Descargado: ${inhouse.length} huéspedes in-house.`)
+  }
+
   if (showAdminLogin) {
     return <Login onLogin={role => { setUserRole(role); setShowAdminLogin(false); setTab("admin") }} />
   }
-
   if (loading) {
     return (
       <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -283,23 +315,14 @@ export default function App() {
   const tabs = [
     { id: "deptos", label: "🏠 Departamentos" },
     { id: "huespedes", label: "👥 Huéspedes por día" },
-    isAdmin
-      ? { id: "admin", label: "⚙️ Administración" }
-      : { id: "adminLogin", label: "🔐 Admin" },
+    isAdmin ? { id: "admin", label: "⚙️ Administración" } : { id: "adminLogin", label: "🔐 Admin" },
   ]
-
   const filteredDeptos = deptos.filter(d => !search || (d.id + d.nombre + d.piso).toLowerCase().includes(search.toLowerCase()))
   const hoyEnFecha = huespedesEnFecha(viewDate)
-
-  const handleTab = id => {
-    if (id === "adminLogin") { setShowAdminLogin(true); return }
-    setTab(id)
-  }
+  const handleTab = id => { if (id === "adminLogin") { setShowAdminLogin(true); return }; setTab(id) }
 
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", background: C.bg, minHeight: "100vh", color: C.text }}>
-
-      {/* HEADER */}
       <div style={{ background: C.navy, padding: "0 1.5rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 0 0" }}>
           <div>
@@ -349,11 +372,10 @@ export default function App() {
                   const status = deptoStatus(d.id)
                   const hList = huespedesDeDepto(d.id, TODAY)
                   const statusColor = status === "ocupado" ? "green" : status === "proximo" ? "amber" : "gray"
-                  const rowBg = status === "ocupado" ? "#F0FAF0" : status === "proximo" ? "#FFFBEB" : C.white
                   return (
                     <div key={d.id} onClick={() => setSelectedDepto(d)}
-                      style={{ ...S.card, background: rowBg, cursor: "pointer", padding: "14px 16px", transition: "box-shadow 0.15s" }}
-                      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.08)"}
+                      style={{ ...S.card, background: C.cardGray, cursor: "pointer", padding: "14px 16px", transition: "box-shadow 0.15s" }}
+                      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.10)"}
                       onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: hList.length > 0 ? 12 : 0 }}>
@@ -383,7 +405,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ── HUÉSPEDES POR DÍA — grid de tarjetas ── */}
+        {/* ── HUÉSPEDES POR DÍA ── */}
         {tab === "huespedes" && (
           <div>
             <SectionHeader title="Huéspedes por día" subtitle="Vista de todos los departamentos ocupados en la fecha seleccionada" />
@@ -392,42 +414,86 @@ export default function App() {
                 <div style={{ fontSize: 12, fontWeight: 600, color: C.accent, marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>Fecha</div>
                 <input type="date" value={viewDate} onChange={e => setViewDate(e.target.value)} style={{ ...S.input, width: "auto", border: `1px solid ${C.accent}` }} />
               </div>
-              <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                <div style={{ fontSize: 28, fontWeight: 800, color: C.navy }}>{hoyEnFecha.length}</div>
-                <div style={{ fontSize: 12, color: C.textSec }}>huésped(es) alojado(s)</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{hoyEnFecha.length}</div>
+                  <div style={{ fontSize: 11, color: C.textSec }}>total alojados</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: C.green }}>{hoyEnFecha.filter(h => getHuespedStatus(h, viewDate) === "checkin").length}</div>
+                  <div style={{ fontSize: 11, color: C.textSec }}>check-in</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: C.red }}>{hoyEnFecha.filter(h => getHuespedStatus(h, viewDate) === "checkout").length}</div>
+                  <div style={{ fontSize: 11, color: C.textSec }}>check-out</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: C.navy }}>{hoyEnFecha.filter(h => getHuespedStatus(h, viewDate) === "inhouse").length}</div>
+                  <div style={{ fontSize: 11, color: C.textSec }}>in-house</div>
+                </div>
+              </div>
+              <div style={{ marginLeft: "auto" }}>
+                <button onClick={downloadInhouse} style={{ ...S.btnPrimary, display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
+                  ⬇ Descargar In-house
+                </button>
               </div>
             </div>
-            {/* leyenda de colores */}
+
+            {/* Leyenda */}
             <div style={{ display: "flex", gap: 10, marginBottom: "1.25rem", flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, fontWeight: 600, background: C.accentLight, color: C.accent, padding: "4px 12px", borderRadius: 20 }}>🔵 Check-in hoy</span>
               <span style={{ fontSize: 12, fontWeight: 600, background: C.redBg, color: C.red, padding: "4px 12px", borderRadius: 20 }}>🔴 Check-out hoy</span>
               <span style={{ fontSize: 12, fontWeight: 600, background: C.greenBg, color: C.green, padding: "4px 12px", borderRadius: 20 }}>🟢 In-house</span>
             </div>
+
             {hoyEnFecha.length === 0 ? (
               <div style={{ ...S.card, textAlign: "center", padding: "3rem", color: C.textSec, fontSize: 14 }}>Sin huéspedes alojados para esta fecha.</div>
             ) : (() => {
               const grouped = {}
-              hoyEnFecha.forEach(h => {
-                const k = h.depto || "Sin depto"
-                if (!grouped[k]) grouped[k] = []
-                grouped[k].push(h)
-              })
+              hoyEnFecha.forEach(h => { const k = h.depto || "Sin depto"; if (!grouped[k]) grouped[k] = []; grouped[k].push(h) })
               const entries = Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
               return (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14 }}>
                   {entries.map(([dep, hs]) => {
-                    const checkinHoy = hs.some(h => h.ingreso === viewDate)
-                    const checkoutHoy = hs.some(h => h.salida === viewDate)
-                    const headerColor = checkoutHoy ? C.red : checkinHoy ? C.accent : C.green
-                    const label = checkoutHoy ? "↑ Check-out" : checkinHoy ? "✓ Check-in" : "In-house"
+                    // Determinar estado predominante
+                    const hasCheckout = hs.some(h => getHuespedStatus(h, viewDate) === "checkout")
+                    const hasCheckin  = hs.some(h => getHuespedStatus(h, viewDate) === "checkin")
+                    const cardBorder  = hasCheckout ? C.red : hasCheckin ? C.accent : C.green
                     return (
-                      <div key={dep} style={{ background: C.white, borderRadius: 14, border: `1px solid ${C.border}`, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
-                        <div style={{ background: headerColor, padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div key={dep} style={{ background: C.cardGray, borderRadius: 14, border: `2px solid ${cardBorder}`, overflow: "hidden", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
+                        {/* Header del card — gris oscuro, sin color */}
+                        <div style={{ background: "#3A4252", padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                           <span style={{ fontWeight: 700, fontSize: 15, color: "#fff" }}>Depto {dep}</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.25)", padding: "2px 10px", borderRadius: 20 }}>{label}</span>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {hs.map((h, idx) => <StatusPill key={idx} status={getHuespedStatus(h, viewDate)} />)}
+                          </div>
                         </div>
+                        {/* Cuerpo */}
                         <div style={{ padding: "10px 12px" }}>
-                          {hs.map((h, idx) => <HuespedCard key={h.id} h={h} index={idx} total={hs.length} />)}
+                          {hs.map((h, idx) => (
+                            <div key={h.id} style={{ background: ["#1B2A4A","#2D4070","#3B5C9E"][idx % 3], borderRadius: 10, padding: "10px 14px", marginBottom: idx < hs.length - 1 ? 8 : 0 }}>
+                              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{h.nombre} {h.apellido}</div>
+                                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.7)", marginTop: 3, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                    {h.id && <span style={{ background: "rgba(255,255,255,0.15)", padding: "1px 7px", borderRadius: 5 }}>DNI: {h.id}</span>}
+                                    {h.horaIngreso && <span>Ingreso: {h.horaIngreso}</span>}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)" }}>Estadía</div>
+                                  <div style={{ fontSize: 12, color: "rgba(255,255,255,0.9)", fontWeight: 500 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
+                                </div>
+                              </div>
+                              {(h.cochera || h.patente || h.vehiculo) && (
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 7 }}>
+                                  {h.cochera && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>🚗 Cochera {h.cochera}</span>}
+                                  {h.patente && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>Patente: {h.patente}</span>}
+                                  {h.vehiculo && <span style={{ fontSize: 11, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)", padding: "2px 8px", borderRadius: 6 }}>{h.vehiculo}</span>}
+                                </div>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )
@@ -462,7 +528,7 @@ export default function App() {
                   <button onClick={() => setShowAddH(true)} style={{ ...S.btnPrimary, width: "100%" }}>+ Agregar manualmente</button>
                 </div>
                 <div style={{ fontSize: 11, color: C.textTer, marginTop: 8 }}>
-                  Columnas: Nombre y Apellido, Depto, Fecha Ingreso, Fecha Salida, ID, Hora ingreso, Usa Cochera, Patente, Marca o Modelo
+                  Columnas: Nombre y Apellido, Depto, Fecha Ingreso, Fecha Salida, ID, Hora ingreso, Usa Cochera (número asignado), Patente, Marca o Modelo
                 </div>
               </div>
             </div>
@@ -477,7 +543,7 @@ export default function App() {
                     <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{h.nombre} {h.apellido}</div>
                     <Badge color="blue">Depto {h.depto}</Badge>
                     <div style={{ fontSize: 12, color: C.textSec }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
-                    {h.usaCochera && <Badge color="gray">🚗 Cochera</Badge>}
+                    {h.cochera && <Badge color="gray">🚗 Cochera {h.cochera}</Badge>}
                     <button onClick={() => setH(huespedes.filter(x => x.id !== h.id))} style={S.btnDanger}>Eliminar</button>
                   </div>
                 ))}
@@ -533,22 +599,16 @@ export default function App() {
       {/* MODAL: agregar huésped */}
       {showAddH && (() => {
         const AddForm = () => {
-          const [form, setForm] = useState({ id: "", nombre: "", apellido: "", depto: "", ingreso: "", salida: "", horaIngreso: "", usaCochera: false, patente: "", vehiculo: "" })
-          const labels = { id: "ID / DNI", nombre: "Nombre", apellido: "Apellido", depto: "Departamento", ingreso: "Fecha ingreso", salida: "Fecha salida", horaIngreso: "Hora ingreso", patente: "Patente", vehiculo: "Marca/Modelo" }
+          const [form, setForm] = useState({ id: "", nombre: "", apellido: "", depto: "", ingreso: "", salida: "", horaIngreso: "", cochera: "", patente: "", vehiculo: "" })
+          const labels = { id: "ID / DNI", nombre: "Nombre", apellido: "Apellido", depto: "Departamento", ingreso: "Fecha ingreso", salida: "Fecha salida", horaIngreso: "Hora ingreso", cochera: "Cochera asignada (nro.)", patente: "Patente", vehiculo: "Marca/Modelo" }
           return (
             <Modal title="Agregar huésped" onClose={() => setShowAddH(false)}>
-              {["id", "nombre", "apellido", "depto", "ingreso", "salida", "horaIngreso", "patente", "vehiculo"].map(k => (
+              {["id", "nombre", "apellido", "depto", "ingreso", "salida", "horaIngreso", "cochera", "patente", "vehiculo"].map(k => (
                 <Field key={k} label={labels[k]}>
                   <input value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
                     style={S.input} type={k === "ingreso" || k === "salida" ? "date" : k === "horaIngreso" ? "time" : "text"} />
                 </Field>
               ))}
-              <Field label="Usa Cochera">
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, cursor: "pointer" }}>
-                  <input type="checkbox" checked={form.usaCochera} onChange={e => setForm(f => ({ ...f, usaCochera: e.target.checked }))} />
-                  Sí, usa cochera
-                </label>
-              </Field>
               <button onClick={() => { setH([...huespedes, { ...form, id: form.id || `h${Date.now()}` }]); setShowAddH(false) }}
                 style={{ ...S.btnPrimary, width: "100%", marginTop: 8 }}>Guardar huésped</button>
             </Modal>
@@ -565,7 +625,7 @@ export default function App() {
           </p>
           <div style={{ background: C.bg, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: C.textSec, marginBottom: 14 }}>
             <b>Columnas reconocidas automáticamente:</b><br />
-            Nombre y Apellido · Depto · Fecha Ingreso · Fecha salida · ID · Hora ingreso · Usa Cochera · Patente · Marca o Modelo
+            Nombre y Apellido · Depto · Fecha Ingreso · Fecha salida · ID · Hora ingreso · Usa Cochera (número de cochera asignada) · Patente · Marca o Modelo
           </div>
           <input type="file" accept=".csv" onChange={e => {
             const f = e.target.files[0]; if (!f) return
