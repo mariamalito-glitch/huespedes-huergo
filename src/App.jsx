@@ -101,14 +101,75 @@ function Toast({msg,isError}){
   return <div style={{background:isError?C.amberBg:C.greenBg,color:isError?C.amber:C.green,border:`1px solid ${isError?"#FCD34D":"#A5D6A7"}`,padding:"10px 1.5rem",fontSize:13,fontWeight:500}}>{msg}</div>;
 }
 
+// ─── MODAL DETALLE HUÉSPED (inhouse / checkout) ────────────────────
+function DetalleHuespedModal({ huesped, fecha, registros, onClose }) {
+  const reg = registros[safeKey(huesped.id)] || {};
+  const status = getStatus(huesped, fecha);
+  const lbl = huespedLabel(status);
+  const [preview, setPreview] = useState(null);
+
+  const rows = [
+    ["ID / DNI", huesped.id && !huesped.id.startsWith("h") ? huesped.id : "—"],
+    ["Nombre", `${huesped.nombre} ${huesped.apellido}`],
+    ["Departamento", huesped.depto || "—"],
+    ["Ingreso", fmtDate(huesped.ingreso)],
+    ["Salida", fmtDate(huesped.salida)],
+    ["Hora ingreso esperada", huesped.horaIngreso || "—"],
+    ["Hora ingreso real", reg.horaIngreso || "—"],
+    ["Hora salida real", reg.horaSalida || "—"],
+    ["Cochera", huesped.cochera || "—"],
+    ["Patente", huesped.patente || "—"],
+    ["Vehículo", huesped.vehiculo || "—"],
+    ["Comentarios", reg.comentario || "—"],
+  ];
+
+  return (
+    <Modal title={`${huesped.nombre} ${huesped.apellido}`} onClose={onClose} wide>
+      <div style={{marginBottom:14}}>
+        <span style={{fontSize:12,fontWeight:700,background:lbl.bg.replace("rgba","rgba").replace("0.25","0.5"),color:lbl.color,padding:"4px 12px",borderRadius:12,border:`1px solid ${lbl.color}33`}}>{lbl.text}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 20px",marginBottom:16}}>
+        {rows.map(([label,val])=>(
+          <div key={label} style={{padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.textTer,textTransform:"uppercase",letterSpacing:0.4}}>{label}</div>
+            <div style={{fontSize:13,color:C.text,marginTop:2,fontWeight:val==="—"?400:500}}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      {reg.fotos && reg.fotos.length > 0 && (
+        <div style={{marginTop:8}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:8,textTransform:"uppercase",letterSpacing:0.5}}>Documentos ({reg.fotos.length})</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8}}>
+            {reg.fotos.map((p,i)=>(
+              <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden",border:`1px solid ${C.border}`,cursor:"pointer"}} onClick={()=>setPreview(p.dataUrl)}>
+                <img src={p.dataUrl} alt={p.name} style={{width:"100%",height:100,objectFit:"cover",display:"block"}} />
+                <div style={{fontSize:10,padding:"3px 5px",background:"rgba(0,0,0,0.5)",color:"#fff",position:"absolute",bottom:0,left:0,right:0,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{p.name}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <button onClick={onClose} style={{...S.btnSecondary,width:"100%",marginTop:20}}>Cerrar</button>
+
+      {preview && (
+        <div onClick={()=>setPreview(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <img src={preview} alt="preview" style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:10,boxShadow:"0 4px 32px rgba(0,0,0,0.5)"}} />
+          <button onClick={()=>setPreview(null)} style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",fontSize:24,cursor:"pointer",borderRadius:"50%",width:36,height:36}}>×</button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ─── MODAL EDITAR HUÉSPED (con foto de documento) ─────────────────
 function EditHuespedModal({ huesped, onSave, onClose, registros, onUpdateReg }) {
   const [form, setForm]     = useState({...huesped});
-  const [photos, setPhotos] = useState([]); // [{name, dataUrl}]
+  const [photos, setPhotos] = useState([]);
   const [preview, setPreview] = useState(null);
   const fileRef = useRef();
 
-  // Cargar fotos existentes desde registros
   useEffect(() => {
     const reg = registros[safeKey(huesped.id)] || {};
     if (reg.fotos) setPhotos(reg.fotos);
@@ -176,7 +237,6 @@ function EditHuespedModal({ huesped, onSave, onClose, registros, onUpdateReg }) 
         <button onClick={handleSave} style={{...S.btnPrimary,flex:1}}>Guardar cambios</button>
       </div>
 
-      {/* Preview foto */}
       {preview && (
         <div onClick={()=>setPreview(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
           <img src={preview} alt="preview" style={{maxWidth:"100%",maxHeight:"90vh",borderRadius:10,boxShadow:"0 4px 32px rgba(0,0,0,0.5)"}} />
@@ -188,7 +248,7 @@ function EditHuespedModal({ huesped, onSave, onClose, registros, onUpdateReg }) 
 }
 
 // ─── GLOBO DE HUÉSPED ──────────────────────────────────────────────
-function HuespedGlobo({ h, fecha, registros, onMarcarIngreso, onMarcarSalida, onEditar }) {
+function HuespedGlobo({ h, fecha, registros, onMarcarIngreso, onMarcarSalida, onEditar, onVerDetalle }) {
   const status = getStatus(h, fecha);
   const bg     = huespedBg(status);
   const lbl    = huespedLabel(status);
@@ -200,8 +260,15 @@ function HuespedGlobo({ h, fecha, registros, onMarcarIngreso, onMarcarSalida, on
   const cardBg  = yaIngreso ? C.checkedIn : yaSalida ? "#4A1010" : bg;
   const border  = yaIngreso ? "2px solid #4CAF50" : yaSalida ? "2px solid #EF5350" : "2px solid transparent";
 
+  // Globo es clickeable para ver detalle en inhouse/checkout
+  const isClickable = onVerDetalle && (status === "inhouse" || status === "checkout");
+
   return (
-    <div style={{background:cardBg,borderRadius:10,padding:"10px 14px",border,transition:"background 0.3s"}}>
+    <div
+      onClick={isClickable ? () => onVerDetalle(h) : undefined}
+      style={{background:cardBg,borderRadius:10,padding:"10px 14px",border,transition:"background 0.3s",cursor:isClickable?"pointer":"default"}}
+      title={isClickable ? "Clic para ver información completa" : undefined}
+    >
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
         <div style={{flex:1}}>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
@@ -210,6 +277,7 @@ function HuespedGlobo({ h, fecha, registros, onMarcarIngreso, onMarcarSalida, on
             {yaIngreso && <span style={{fontSize:11,fontWeight:700,background:"rgba(76,175,80,0.3)",color:"#A5D6A7",padding:"2px 8px",borderRadius:12}}>🏠 Ingresó {reg.horaIngreso?`a las ${reg.horaIngreso}`:""}</span>}
             {yaSalida  && <span style={{fontSize:11,fontWeight:700,background:"rgba(239,83,80,0.3)",color:"#EF9A9A",padding:"2px 8px",borderRadius:12}}>🚪 Salió {reg.horaSalida?`a las ${reg.horaSalida}`:""}</span>}
             {tieneDoc  && <span style={{fontSize:11,fontWeight:700,background:"rgba(255,255,255,0.2)",color:"#fff",padding:"2px 8px",borderRadius:12}}>📷 {reg.fotos.length} doc.</span>}
+            {isClickable && <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontStyle:"italic"}}>↗ ver detalle</span>}
           </div>
           <div style={{fontSize:12,color:"rgba(255,255,255,0.75)",display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
             {h.id&&!h.id.startsWith("h")
@@ -223,7 +291,6 @@ function HuespedGlobo({ h, fecha, registros, onMarcarIngreso, onMarcarSalida, on
             <div style={{fontSize:11,color:"rgba(255,255,255,0.5)"}}>Estadía</div>
             <div style={{fontSize:12,color:"rgba(255,255,255,0.9)",fontWeight:500}}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
           </div>
-          {/* Botón editar — solo check-in */}
           {onEditar && (
             <button onClick={e=>{e.stopPropagation();onEditar(h);}} style={{background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",borderRadius:7,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
               ✏️ Editar
@@ -287,14 +354,18 @@ export default function App() {
   const [showAdminLogin,setShowAdminLogin] = useState(false);
   const [showConfirmBorrar,setShowConfirmBorrar] = useState(false);
   const [showCSVModal,setShowCSVModal] = useState(null);
-  const [editHuesped,setEditHuesped] = useState(null);   // admin list
-  const [editDia,setEditDia]     = useState(null);       // huéspedes por día (solo check-in)
+  const [editHuesped,setEditHuesped] = useState(null);
+  const [editDia,setEditDia]     = useState(null);
+  // NUEVO: modal detalle para inhouse/checkout
+  const [detalleHuesped,setDetalleHuesped] = useState(null);
   const [importMsg,setImportMsg] = useState("");
   const [importError,setImportError] = useState(false);
   const [loading,setLoading]   = useState(true);
   const [searchDeptos,setSearchDeptos] = useState("");
   const [searchAdmin,setSearchAdmin]   = useState("");
   const [searchDia,setSearchDia]       = useState("");
+  // NUEVO: filtro de estado en pestaña huéspedes por día
+  const [filtroEstado,setFiltroEstado] = useState("todos"); // "todos" | "checkin" | "inhouse" | "checkout"
   const fileDRef = useRef();
 
   useEffect(()=>{
@@ -331,12 +402,10 @@ export default function App() {
     else { const hora=nowTimeStr(); updateReg(h.id,{salido:true,horaSalida:hora}); toast(`✓ Salida registrada a las ${hora}`); }
   };
 
-  // Guardar edición desde admin
   const handleEditSave = updated => {
     setH(huespedes.map(h=>h.id===editHuesped.id?updated:h));
     setEditHuesped(null); toast("✓ Huésped actualizado.");
   };
-  // Guardar edición desde huéspedes por día (solo check-in)
   const handleEditDiaSave = updated => {
     setH(huespedes.map(h=>h.id===editDia.id?updated:h));
     setEditDia(null); toast("✓ Datos actualizados.");
@@ -426,20 +495,36 @@ export default function App() {
 
   const filteredDeptos=deptos.filter(d=>!searchDeptos||(d.id+d.nombre+d.piso).toLowerCase().includes(searchDeptos.toLowerCase()));
   const hoyEnFecha=huespedesEnFecha(viewDate);
-  const filteredDia=searchDia ? hoyEnFecha.filter(h=>{ const q=searchDia.toLowerCase(); return `${h.nombre} ${h.apellido}`.toLowerCase().includes(q)||(h.depto||"").toLowerCase().includes(q); }) : hoyEnFecha;
+
+  // Contadores para los botones de filtro
+  const cuentas = {
+    todos: hoyEnFecha.length,
+    checkin: hoyEnFecha.filter(h=>getStatus(h,viewDate)==="checkin").length,
+    inhouse: hoyEnFecha.filter(h=>getStatus(h,viewDate)==="inhouse").length,
+    checkout: hoyEnFecha.filter(h=>getStatus(h,viewDate)==="checkout").length,
+  };
+
+  // Aplicar filtro de búsqueda y estado
+  const filteredPorEstado = filtroEstado==="todos" ? hoyEnFecha : hoyEnFecha.filter(h=>getStatus(h,viewDate)===filtroEstado);
+  const filteredDia = searchDia
+    ? filteredPorEstado.filter(h=>{ const q=searchDia.toLowerCase(); return `${h.nombre} ${h.apellido}`.toLowerCase().includes(q)||(h.depto||"").toLowerCase().includes(q); })
+    : filteredPorEstado;
+
   const filteredAdmin=searchAdmin ? huespedes.filter(h=>{ const q=searchAdmin.toLowerCase(); return `${h.nombre} ${h.apellido}`.toLowerCase().includes(q)||(h.depto||"").toLowerCase().includes(q)||(h.id||"").toLowerCase().includes(q); }) : huespedes;
   const handleTab=id=>{ if(id==="adminLogin"){setShowAdminLogin(true);return;} setTab(id); };
 
-  // Props para globos: editar solo en check-in, resto solo lectura
   const globoProps = (h, fecha) => ({
     h, fecha, registros,
     onMarcarIngreso: getStatus(h,fecha)==="checkin" ? handleMarcarIngreso : null,
     onMarcarSalida:  getStatus(h,fecha)==="checkout" ? handleMarcarSalida : null,
-    onEditar:        null, // solo en pestaña huéspedes por día
+    onEditar:        null,
+    onVerDetalle:    null,
   });
   const globoPropsDia = (h) => ({
     ...globoProps(h, viewDate),
     onEditar: getStatus(h,viewDate)==="checkin" ? setEditDia : null,
+    // NUEVO: inhouse y checkout abren modal detalle al clickear el globo
+    onVerDetalle: (getStatus(h,viewDate)==="inhouse" || getStatus(h,viewDate)==="checkout") ? setDetalleHuesped : null,
   });
 
   return (
@@ -536,7 +621,7 @@ export default function App() {
                 <input type="date" value={viewDate} onChange={e=>setViewDate(e.target.value)} style={{...S.input,width:"auto",border:`1px solid ${C.accent}`}} />
               </div>
               <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
-                {[{label:"total",val:hoyEnFecha.length,color:C.navy},{label:"check-in",val:hoyEnFecha.filter(h=>getStatus(h,viewDate)==="checkin").length,color:C.accent},{label:"in-house",val:hoyEnFecha.filter(h=>getStatus(h,viewDate)==="inhouse").length,color:C.green},{label:"check-out",val:hoyEnFecha.filter(h=>getStatus(h,viewDate)==="checkout").length,color:C.red}].map(s=>(
+                {[{label:"total",val:cuentas.todos,color:C.navy},{label:"check-in",val:cuentas.checkin,color:C.accent},{label:"in-house",val:cuentas.inhouse,color:C.green},{label:"check-out",val:cuentas.checkout,color:C.red}].map(s=>(
                   <div key={s.label} style={{textAlign:"center"}}>
                     <div style={{fontSize:24,fontWeight:800,color:s.color}}>{s.val}</div>
                     <div style={{fontSize:11,color:C.textSec}}>{s.label}</div>
@@ -548,20 +633,39 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{marginBottom:"1rem"}}>
-              <input placeholder="🔍  Buscar por nombre o depto..." value={searchDia} onChange={e=>setSearchDia(e.target.value)} style={{...S.input,maxWidth:320}} />
+            {/* Búsqueda + filtros de estado */}
+            <div style={{display:"flex",gap:10,marginBottom:"1rem",flexWrap:"wrap",alignItems:"center"}}>
+              <input placeholder="🔍  Buscar por nombre o depto..." value={searchDia} onChange={e=>setSearchDia(e.target.value)} style={{...S.input,maxWidth:280}} />
+              {/* NUEVO: botones de filtro por estado */}
+              {[
+                {key:"todos",   label:`Todos (${cuentas.todos})`,    bg:C.navy,    active:"#fff",inactiveText:"rgba(255,255,255,0.6)"},
+                {key:"checkin", label:`Check-in (${cuentas.checkin})`, bg:C.accent, active:"#fff",inactiveText:"rgba(59,111,212,0.7)"},
+                {key:"inhouse", label:`In-house (${cuentas.inhouse})`, bg:C.green,  active:"#fff",inactiveText:"rgba(46,125,50,0.7)"},
+                {key:"checkout",label:`Check-out (${cuentas.checkout})`,bg:C.red,   active:"#fff",inactiveText:"rgba(183,28,28,0.7)"},
+              ].map(f=>(
+                <button key={f.key} onClick={()=>setFiltroEstado(f.key)}
+                  style={{
+                    border:"none",borderRadius:20,padding:"6px 16px",fontSize:12,fontWeight:700,cursor:"pointer",
+                    background: filtroEstado===f.key ? f.bg : C.white,
+                    color: filtroEstado===f.key ? f.active : f.bg,
+                    boxShadow: filtroEstado===f.key ? "0 2px 8px rgba(0,0,0,0.18)" : "none",
+                    border: `2px solid ${f.bg}`,
+                    transition:"all 0.15s",
+                  }}
+                >{f.label}</button>
+              ))}
             </div>
 
             {/* Leyenda con nota de edición */}
             <div style={{display:"flex",gap:10,marginBottom:"1.25rem",flexWrap:"wrap",alignItems:"center"}}>
               <span style={{fontSize:12,fontWeight:600,background:C.accentLight,color:C.accent,padding:"4px 12px",borderRadius:20}}>🔵 Check-in hoy — editables</span>
-              <span style={{fontSize:12,fontWeight:600,background:C.greenBg,color:C.green,padding:"4px 12px",borderRadius:20}}>🟢 In-house — solo lectura</span>
-              <span style={{fontSize:12,fontWeight:600,background:C.redBg,color:C.red,padding:"4px 12px",borderRadius:20}}>🔴 Check-out hoy — solo lectura</span>
+              <span style={{fontSize:12,fontWeight:600,background:C.greenBg,color:C.green,padding:"4px 12px",borderRadius:20}}>🟢 In-house — clic para ver detalle</span>
+              <span style={{fontSize:12,fontWeight:600,background:C.redBg,color:C.red,padding:"4px 12px",borderRadius:20}}>🔴 Check-out hoy — clic para ver detalle</span>
             </div>
 
             {filteredDia.length===0 ? (
               <div style={{...S.card,textAlign:"center",padding:"3rem",color:C.textSec,fontSize:14}}>
-                {hoyEnFecha.length===0?"Sin huéspedes alojados para esta fecha.":"Sin resultados para la búsqueda."}
+                {hoyEnFecha.length===0?"Sin huéspedes alojados para esta fecha.":"Sin resultados para la búsqueda o el filtro seleccionado."}
               </div>
             ) : (() => {
               const grouped={};
@@ -656,7 +760,7 @@ export default function App() {
       {selectedDepto&&(()=>{
         const d=selectedDepto;
         const hList=huespedesDeDepto(d.id,TODAY);
-        const reg=hList.length>0?(registros[safeKey(hList[0].id)]||{}):{}; 
+        const reg=hList.length>0?(registros[safeKey(hList[0].id)]||{}):{};
         return (
           <Modal title={`Depto ${d.nombre||d.id}${d.piso?` · Piso ${d.piso}`:""}`} onClose={()=>setSelectedDepto(null)}>
             {hList.length>0?(
@@ -731,6 +835,11 @@ export default function App() {
       {/* MODAL: editar desde huéspedes por día (solo check-in) */}
       {editDia&&(
         <EditHuespedModal huesped={editDia} onSave={handleEditDiaSave} onClose={()=>setEditDia(null)} registros={registros} onUpdateReg={updateReg} />
+      )}
+
+      {/* MODAL: ver detalle huésped (inhouse / checkout) */}
+      {detalleHuesped&&(
+        <DetalleHuespedModal huesped={detalleHuesped} fecha={viewDate} registros={registros} onClose={()=>setDetalleHuesped(null)} />
       )}
     </div>
   );
