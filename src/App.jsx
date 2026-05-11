@@ -132,15 +132,20 @@ function Toast({ msg, isError }) {
 }
 
 // ─── HUÉSPED GLOBO con botón de ingreso ───────────────────────────
-function HuespedGlobo({ h, fecha, registros, onMarcarIngreso }) {
+function HuespedGlobo({ h, fecha, registros, onMarcarIngreso, onMarcarSalida }) {
   const status = getHuespedStatus(h, fecha);
   const bg = huespedBg(status);
   const lbl = huespedLabel(status);
-  const reg = registros[h.id] || {};
+  const safeKey = h.id.replace(/[.#$/[\]]/g,"_");
+  const reg = registros[safeKey] || {};
   const yaIngreso = !!reg.ingresado;
+  const yaSalida  = !!reg.salido;
+
+  const cardBg = yaIngreso ? C.checkedIn : yaSalida ? "#4A1010" : bg;
+  const cardBorder = yaIngreso ? "2px solid #4CAF50" : yaSalida ? "2px solid #EF5350" : "2px solid transparent";
 
   return (
-    <div style={{ background: yaIngreso ? C.checkedIn : bg, borderRadius:10, padding:"10px 14px", border: yaIngreso ? "2px solid #4CAF50" : "2px solid transparent", transition:"background 0.3s" }}>
+    <div style={{ background: cardBg, borderRadius:10, padding:"10px 14px", border: cardBorder, transition:"background 0.3s" }}>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8 }}>
         <div style={{ flex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
@@ -149,6 +154,11 @@ function HuespedGlobo({ h, fecha, registros, onMarcarIngreso }) {
             {yaIngreso && (
               <span style={{ fontSize:11, fontWeight:700, background:"rgba(76,175,80,0.3)", color:"#A5D6A7", padding:"2px 8px", borderRadius:12 }}>
                 🏠 Ingresó {reg.horaIngreso ? `a las ${reg.horaIngreso}` : ""}
+              </span>
+            )}
+            {yaSalida && (
+              <span style={{ fontSize:11, fontWeight:700, background:"rgba(239,83,80,0.3)", color:"#EF9A9A", padding:"2px 8px", borderRadius:12 }}>
+                🚪 Salió {reg.horaSalida ? `a las ${reg.horaSalida}` : ""}
               </span>
             )}
           </div>
@@ -165,19 +175,24 @@ function HuespedGlobo({ h, fecha, registros, onMarcarIngreso }) {
             <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)" }}>Estadía</div>
             <div style={{ fontSize:12, color:"rgba(255,255,255,0.9)", fontWeight:500 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
           </div>
-          {/* BOTÓN MARCAR INGRESO */}
           {onMarcarIngreso && (
-            <button
-              onClick={e => { e.stopPropagation(); onMarcarIngreso(h); }}
-              style={{
-                background: yaIngreso ? "rgba(76,175,80,0.25)" : "rgba(255,255,255,0.18)",
-                border: yaIngreso ? "1px solid rgba(76,175,80,0.5)" : "1px solid rgba(255,255,255,0.35)",
-                color: yaIngreso ? "#A5D6A7" : "#fff",
-                borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:700, cursor:"pointer",
-                whiteSpace:"nowrap"
-              }}
-            >
+            <button onClick={e=>{ e.stopPropagation(); onMarcarIngreso(h); }} style={{
+              background: yaIngreso ? "rgba(76,175,80,0.25)" : "rgba(255,255,255,0.18)",
+              border: yaIngreso ? "1px solid rgba(76,175,80,0.5)" : "1px solid rgba(255,255,255,0.35)",
+              color: yaIngreso ? "#A5D6A7" : "#fff",
+              borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap"
+            }}>
               {yaIngreso ? "✓ Ingresado" : "🔑 Marcar ingreso"}
+            </button>
+          )}
+          {onMarcarSalida && (
+            <button onClick={e=>{ e.stopPropagation(); onMarcarSalida(h); }} style={{
+              background: yaSalida ? "rgba(239,83,80,0.25)" : "rgba(255,255,255,0.18)",
+              border: yaSalida ? "1px solid rgba(239,83,80,0.5)" : "1px solid rgba(255,255,255,0.35)",
+              color: yaSalida ? "#EF9A9A" : "#fff",
+              borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:700, cursor:"pointer", whiteSpace:"nowrap"
+            }}>
+              {yaSalida ? "✓ Salida marcada" : "🚪 Marcar salida"}
             </button>
           )}
         </div>
@@ -292,13 +307,25 @@ export default function App() {
     const safeKey = h.id.replace(/[.#$/[\]]/g,"_");
     const reg = registros[safeKey] || {};
     if (reg.ingresado) {
-      // toggle off
       updateReg(h.id, { ingresado: false, horaIngreso: "" });
       toast("Ingreso desmarcado.");
     } else {
       const hora = nowTimeStr();
       updateReg(h.id, { ingresado: true, horaIngreso: hora });
       toast(`✓ Ingreso registrado a las ${hora} para ${h.nombre} ${h.apellido}`);
+    }
+  };
+
+  const handleMarcarSalida = (h) => {
+    const safeKey = h.id.replace(/[.#$/[\]]/g,"_");
+    const reg = registros[safeKey] || {};
+    if (reg.salido) {
+      updateReg(h.id, { salido: false, horaSalida: "" });
+      toast("Salida desmarcada.");
+    } else {
+      const hora = nowTimeStr();
+      updateReg(h.id, { salido: true, horaSalida: hora });
+      toast(`✓ Salida registrada a las ${hora} para ${h.nombre} ${h.apellido}`);
     }
   };
 
@@ -492,7 +519,7 @@ export default function App() {
                       </div>
                       {hList.length>0 && (
                         <div style={{ display:"flex", flexDirection:"column", gap:8 }} onClick={e=>e.stopPropagation()}>
-                          {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={getHuespedStatus(h,TODAY)==="checkin"?handleMarcarIngreso:null} />)}
+                          {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={getHuespedStatus(h,TODAY)==="checkin"?handleMarcarIngreso:null} onMarcarSalida={getHuespedStatus(h,TODAY)==="checkout"?handleMarcarSalida:null} />)}
                         </div>
                       )}
                     </div>
@@ -566,7 +593,7 @@ export default function App() {
                           <span style={{ fontWeight:700, fontSize:15, color:"#fff" }}>Depto {dep}</span>
                         </div>
                         <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
-                          {hs.map(h=><HuespedGlobo key={h.id} h={h} fecha={viewDate} registros={registros} onMarcarIngreso={getHuespedStatus(h,viewDate)==="checkin"?handleMarcarIngreso:null} />)}
+                          {hs.map(h=><HuespedGlobo key={h.id} h={h} fecha={viewDate} registros={registros} onMarcarIngreso={getHuespedStatus(h,viewDate)==="checkin"?handleMarcarIngreso:null} onMarcarSalida={getHuespedStatus(h,viewDate)==="checkout"?handleMarcarSalida:null} />)}
                         </div>
                       </div>
                     );
@@ -666,7 +693,7 @@ export default function App() {
             {hList.length>0 ? (
               <>
                 <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
-                  {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={getHuespedStatus(h,TODAY)==="checkin"?handleMarcarIngreso:null} />)}
+                  {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={getHuespedStatus(h,TODAY)==="checkin"?handleMarcarIngreso:null} onMarcarSalida={getHuespedStatus(h,TODAY)==="checkout"?handleMarcarSalida:null} />)}
                 </div>
                 <Field label="Hora de ingreso real">
                   <input type="time" defaultValue={reg.horaIngreso||""} onChange={e=>updateReg(hList[0].id,{horaIngreso:e.target.value})} style={S.input} />
