@@ -1,6 +1,28 @@
 import { useState, useEffect, useRef } from "react";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-const STORAGE_KEYS = { deptos: "huesped_deptos", huespedes: "huesped_data", registros: "huesped_registros" };
+// ─── FIREBASE CONFIG ───────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDlGAAviTBQTbm2rDY29cVaPCP8zvjLB7Q",
+  authDomain: "huespedes-4fcdf.firebaseapp.com",
+  databaseURL: "https://huespedes-4fcdf-default-rtdb.firebaseio.com",
+  projectId: "huespedes-4fcdf",
+  storageBucket: "huespedes-4fcdf.firebasestorage.app",
+  messagingSenderId: "1047981839207",
+  appId: "1:1047981839207:web:38711ce83c7e2846dcd5c2",
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getDatabase(firebaseApp);
+
+function fbSet(path, val) { return set(ref(db, path), val); }
+function fbListen(path, cb) {
+  const r = ref(db, path);
+  onValue(r, snap => cb(snap.exists() ? snap.val() : null));
+  return () => off(r);
+}
+
+// ─── CONSTANTES ────────────────────────────────────────────────────
 const ADMIN_PASS = "admin123";
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -48,6 +70,7 @@ const S = {
   btnPrimary:{ background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:14, fontWeight:600, cursor:"pointer" },
   btnSecondary:{ background:C.white, color:C.accent, border:`1px solid ${C.accent}`, borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:500, cursor:"pointer" },
   btnDanger:{ background:C.redBg, color:C.red, border:`1px solid #FFCDD2`, borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:500, cursor:"pointer" },
+  btnEdit:{ background:"#FFF8E1", color:"#B45309", border:`1px solid #FFD54F`, borderRadius:8, padding:"5px 12px", fontSize:12, fontWeight:500, cursor:"pointer" },
   card:{ background:C.white, borderRadius:12, border:`1px solid ${C.border}`, padding:"1rem 1.25rem" },
 };
 
@@ -57,7 +80,7 @@ function getHuespedStatus(h, fecha) {
   return "inhouse";
 }
 function huespedBg(status) {
-  if (status === "checkin")  return C.checkinBg;
+  if (status === "checkin") return C.checkinBg;
   if (status === "checkout") return C.checkoutBg;
   return C.inhouseBg;
 }
@@ -113,7 +136,6 @@ function HuespedGlobo({ h, fecha, showId=false }) {
             <span style={{ fontSize:11, fontWeight:700, background:lbl.bg, color:lbl.color, padding:"2px 8px", borderRadius:12 }}>{lbl.text}</span>
           </div>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.75)", display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
-            {/* ID siempre visible */}
             {h.id && !h.id.startsWith("h")
               ? <span style={{ background:"rgba(255,255,255,0.22)", padding:"2px 8px", borderRadius:5, color:"#fff", fontWeight:700 }}>🪪 {h.id}</span>
               : <span style={{ color:"rgba(255,255,255,0.4)", fontStyle:"italic", fontSize:11 }}>Sin ID</span>
@@ -159,6 +181,36 @@ function Login({ onLogin }) {
   );
 }
 
+// ─── MODAL EDITAR HUÉSPED ──────────────────────────────────────────
+function EditHuespedModal({ huesped, onSave, onClose }) {
+  const [form, setForm] = useState({ ...huesped });
+  const labels = {
+    id:"ID / DNI", nombre:"Nombre", apellido:"Apellido", depto:"Departamento",
+    ingreso:"Fecha ingreso", salida:"Fecha salida", horaIngreso:"Hora ingreso",
+    cochera:"Cochera asignada", patente:"Patente", vehiculo:"Marca/Modelo"
+  };
+  const fields = ["id","nombre","apellido","depto","ingreso","salida","horaIngreso","cochera","patente","vehiculo"];
+  return (
+    <Modal title={`Editar huésped: ${huesped.nombre} ${huesped.apellido}`} onClose={onClose}>
+      {fields.map(k => (
+        <Field key={k} label={labels[k]}>
+          <input
+            value={form[k]||""}
+            onChange={e => setForm(f => ({...f, [k]: e.target.value}))}
+            style={S.input}
+            type={k==="ingreso"||k==="salida"?"date": k==="horaIngreso"?"time":"text"}
+          />
+        </Field>
+      ))}
+      <div style={{ display:"flex", gap:10, marginTop:8 }}>
+        <button onClick={onClose} style={{ ...S.btnSecondary, flex:1 }}>Cancelar</button>
+        <button onClick={() => onSave(form)} style={{ ...S.btnPrimary, flex:1 }}>Guardar cambios</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── APP PRINCIPAL ─────────────────────────────────────────────────
 export default function App() {
   const [userRole, setUserRole] = useState("general");
   const [tab, setTab] = useState("deptos");
@@ -172,36 +224,54 @@ export default function App() {
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showConfirmBorrar, setShowConfirmBorrar] = useState(false);
   const [showCSVModal, setShowCSVModal] = useState(null);
+  const [editHuesped, setEditHuesped] = useState(null);
   const [importMsg, setImportMsg] = useState("");
   const [importError, setImportError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const fileDRef = useRef();
 
+  // ── Firebase listeners ──────────────────────────────────────────
   useEffect(() => {
-    async function load() {
-      try { const d=await window.storage.get(STORAGE_KEYS.deptos, true); if(d) setDeptos(JSON.parse(d.value)); } catch {}
-      try { const h=await window.storage.get(STORAGE_KEYS.huespedes, true); if(h) setHuespedes(JSON.parse(h.value)); } catch {}
-      try { const r=await window.storage.get(STORAGE_KEYS.registros, true); if(r) setRegistros(JSON.parse(r.value)); } catch {}
-      setLoading(false);
-    }
-    load();
+    let loaded = 0;
+    const done = () => { loaded++; if (loaded >= 3) setLoading(false); };
+
+    const unD = fbListen("deptos",    v => { setDeptos(v ? Object.values(v) : []); done(); });
+    const unH = fbListen("huespedes", v => { setHuespedes(v ? Object.values(v) : []); done(); });
+    const unR = fbListen("registros", v => { setRegistros(v || {}); done(); });
+
+    return () => { unD(); unH(); unR(); };
   }, []);
 
-  const persist = async (key,val) => { try { await window.storage.set(key, JSON.stringify(val), true); } catch {} };
-  const setD = v => { setDeptos(v); persist(STORAGE_KEYS.deptos, v); };
-  const setH = v => { setHuespedes(v); persist(STORAGE_KEYS.huespedes, v); };
-  const setR = v => { setRegistros(v); persist(STORAGE_KEYS.registros, v); };
-  const updateReg = (hid,patch) => { const u={...registros,[hid]:{...(registros[hid]||{}),...patch}}; setR(u); };
+  // ── Persistencia Firebase ───────────────────────────────────────
+  const saveDeptos    = list => fbSet("deptos",    Object.fromEntries(list.map(d => [d.id.replace(/[.#$/[\]]/g,"_"), d])));
+  const saveHuespedes = list => fbSet("huespedes", Object.fromEntries(list.map(h => [h.id.replace(/[.#$/[\]]/g,"_"), h])));
+  const saveRegistros = obj  => fbSet("registros", obj);
+
+  const setD = v => saveDeptos(v);
+  const setH = v => saveHuespedes(v);
+  const setR = v => saveRegistros(v);
+  const updateReg = (hid, patch) => {
+    const u = { ...registros, [hid]: { ...(registros[hid]||{}), ...patch } };
+    setR(u);
+  };
 
   const toast = (msg, isError=false) => {
-    setImportError(isError);
-    setImportMsg(msg);
+    setImportError(isError); setImportMsg(msg);
     setTimeout(() => setImportMsg(""), 5000);
   };
 
-  const isAdmin = userRole==="admin";
+  const isAdmin = userRole === "admin";
 
+  // ── Editar huésped ──────────────────────────────────────────────
+  const handleEditSave = (updated) => {
+    const newList = huespedes.map(h => h.id === editHuesped.id ? updated : h);
+    setH(newList);
+    setEditHuesped(null);
+    toast("✓ Huésped actualizado correctamente.");
+  };
+
+  // ── CSV import ──────────────────────────────────────────────────
   function importDeptos(text) {
     const {rows} = parseCSV(text);
     const list = rows.map(r=>({
@@ -222,11 +292,9 @@ export default function App() {
       nombre = findField(r,["nombre","name","first"]);
       apellido = findField(r,["apellido","last","surname"]);
     }
-    // ID: buscar columna exacta "id" primero
     const keys = Object.keys(r);
     const idKey = keys.find(k => k === "id") || keys.find(k => k.startsWith("id"));
     const docId = (idKey && r[idKey]) ? r[idKey] : findField(r,["dni","pasaporte","documento","passport","doc"]);
-
     const rawIngreso = findField(r,["fecha_ingreso","fecha_de_ingreso","ingreso","checkin","check_in","entrada","from","inicio"]);
     const rawSalida  = findField(r,["fecha_salida","fecha_de_salida","salida","checkout","check_out","hasta","to","fin"]);
     const horaIngreso = findField(r,["hora_ingreso","hora_de_ingreso","hora"]);
@@ -248,36 +316,17 @@ export default function App() {
   function importHuespedes(text, replace=false) {
     const {rows} = parseCSV(text);
     const incoming = rows.map((r,i) => parseHuesped(r,i)).filter(r=>r.nombre||r.apellido);
-
-    if (replace) {
-      setH(incoming);
-      toast(`✓ ${incoming.length} huéspedes cargados.`);
-      return;
-    }
-
-    // Detectar duplicados por ID (solo los que tienen ID real, no generado)
+    if (replace) { setH(incoming); toast(`✓ ${incoming.length} huéspedes cargados.`); return; }
     const existingIds = new Set(huespedes.filter(h => !h.id.startsWith("h")).map(h => h.id));
-    const nuevos = [];
-    const duplicados = [];
+    const nuevos = [], duplicados = [];
     incoming.forEach(h => {
-      if (!h.id.startsWith("h") && existingIds.has(h.id)) {
-        duplicados.push(h);
-      } else {
-        nuevos.push(h);
-      }
+      if (!h.id.startsWith("h") && existingIds.has(h.id)) duplicados.push(h);
+      else nuevos.push(h);
     });
-
-    if (nuevos.length === 0) {
-      toast(`⚠️ No se agregaron huéspedes: los ${duplicados.length} del CSV ya estaban cargados.`, true);
-      return;
-    }
-
+    if (nuevos.length === 0) { toast(`⚠️ No se agregaron huéspedes: los ${duplicados.length} del CSV ya estaban cargados.`, true); return; }
     setH([...huespedes, ...nuevos]);
-    if (duplicados.length > 0) {
-      toast(`✓ ${nuevos.length} huésped(es) agregado(s). Se omitieron ${duplicados.length} duplicado(s).`, false);
-    } else {
-      toast(`✓ ${nuevos.length} huésped(es) agregado(s).`);
-    }
+    if (duplicados.length > 0) toast(`✓ ${nuevos.length} huésped(es) agregado(s). Se omitieron ${duplicados.length} duplicado(s).`);
+    else toast(`✓ ${nuevos.length} huésped(es) agregado(s).`);
   }
 
   function huespedesEnFecha(fecha) {
@@ -312,7 +361,7 @@ export default function App() {
     <div style={{ minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div style={{ textAlign:"center", color:C.textSec }}>
         <div style={{ fontSize:32, marginBottom:12 }}>🏢</div>
-        <div style={{ fontSize:15, fontWeight:600, color:C.navy }}>Cargando datos...</div>
+        <div style={{ fontSize:15, fontWeight:600, color:C.navy }}>Conectando con Firebase...</div>
       </div>
     </div>
   );
@@ -516,6 +565,7 @@ export default function App() {
                     <Badge color="blue">Depto {h.depto}</Badge>
                     <div style={{ fontSize:12, color:C.textSec }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
                     {h.cochera && <Badge color="gray">🚗 {h.cochera}</Badge>}
+                    <button onClick={()=>setEditHuesped(h)} style={S.btnEdit}>✏️ Editar</button>
                     <button onClick={()=>setH(huespedes.filter(x=>x.id!==h.id))} style={S.btnDanger}>Eliminar</button>
                   </div>
                 ))}
@@ -634,6 +684,15 @@ export default function App() {
             style={{ ...S.btnPrimary, width:"100%", marginTop:10 }}>📋 Copiar al portapapeles</button>
           <button onClick={()=>setShowCSVModal(null)} style={{ ...S.btnSecondary, width:"100%", marginTop:8 }}>Cerrar</button>
         </Modal>
+      )}
+
+      {/* MODAL: editar huésped */}
+      {editHuesped && (
+        <EditHuespedModal
+          huesped={editHuesped}
+          onSave={handleEditSave}
+          onClose={()=>setEditHuesped(null)}
+        />
       )}
     </div>
   );
