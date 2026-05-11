@@ -1,25 +1,28 @@
 import { useState, useEffect, useRef } from "react";
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-// ─── FIREBASE CONFIG ───────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey: "AIzaSyDlGAAviTBQTbm2rDY29cVaPCP8zvjLB7Q",
-  authDomain: "huespedes-4fcdf.firebaseapp.com",
-  databaseURL: "https://huespedes-4fcdf-default-rtdb.firebaseio.com",
-  projectId: "huespedes-4fcdf",
-  storageBucket: "huespedes-4fcdf.firebasestorage.app",
-  messagingSenderId: "1047981839207",
-  appId: "1:1047981839207:web:38711ce83c7e2846dcd5c2",
-};
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getDatabase(firebaseApp);
+// ─── FIREBASE (CDN via dynamic import) ────────────────────────────
+let fbSet, fbListen;
 
-function fbSet(path, val) { return set(ref(db, path), val); }
-function fbListen(path, cb) {
-  const r = ref(db, path);
-  onValue(r, snap => cb(snap.exists() ? snap.val() : null));
-  return () => off(r);
+async function initFirebase() {
+  const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
+  const { getDatabase, ref, set, onValue, off } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
+  const firebaseConfig = {
+    apiKey: "AIzaSyDlGAAviTBQTbm2rDY29cVaPCP8zvjLB7Q",
+    authDomain: "huespedes-4fcdf.firebaseapp.com",
+    databaseURL: "https://huespedes-4fcdf-default-rtdb.firebaseio.com",
+    projectId: "huespedes-4fcdf",
+    storageBucket: "huespedes-4fcdf.firebasestorage.app",
+    messagingSenderId: "1047981839207",
+    appId: "1:1047981839207:web:38711ce83c7e2846dcd5c2",
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  fbSet = (path, val) => set(ref(db, path), val);
+  fbListen = (path, cb) => {
+    const r = ref(db, path);
+    onValue(r, snap => cb(snap.exists() ? snap.val() : null));
+    return () => off(r);
+  };
 }
 
 // ─── CONSTANTES ────────────────────────────────────────────────────
@@ -57,6 +60,10 @@ function findField(obj, candidates) {
 function fmtDate(iso) {
   if (!iso) return "—"; const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`;
 }
+function nowTimeStr() {
+  const n = new Date();
+  return `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+}
 
 const C = {
   bg:"#F4F6F9", white:"#FFFFFF", navy:"#1B2A4A", accent:"#3B6FD4", accentLight:"#EBF0FA",
@@ -64,6 +71,7 @@ const C = {
   red:"#B71C1C", redBg:"#FFEBEE", gray:"#555E6B", grayBg:"#F1F3F5",
   border:"#DDE2EA", text:"#1A1F2B", textSec:"#5A6270", textTer:"#8C95A0", cardGray:"#E8ECF0",
   checkinBg:"#1A3A6B", inhouseBg:"#1B5E20", checkoutBg:"#7B1515",
+  checkedIn:"#0D3321",
 };
 const S = {
   input:{ width:"100%", boxSizing:"border-box", fontSize:14, padding:"8px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:C.white, color:C.text },
@@ -123,17 +131,26 @@ function Toast({ msg, isError }) {
   return <div style={{ background: isError ? C.amberBg : C.greenBg, color: isError ? C.amber : C.green, border:`1px solid ${isError ? "#FCD34D" : "#A5D6A7"}`, padding:"10px 1.5rem", fontSize:13, fontWeight:500 }}>{msg}</div>;
 }
 
-function HuespedGlobo({ h, fecha, showId=false }) {
+// ─── HUÉSPED GLOBO con botón de ingreso ───────────────────────────
+function HuespedGlobo({ h, fecha, registros, onMarcarIngreso }) {
   const status = getHuespedStatus(h, fecha);
   const bg = huespedBg(status);
   const lbl = huespedLabel(status);
+  const reg = registros[h.id] || {};
+  const yaIngreso = !!reg.ingresado;
+
   return (
-    <div style={{ background:bg, borderRadius:10, padding:"10px 14px" }}>
+    <div style={{ background: yaIngreso ? C.checkedIn : bg, borderRadius:10, padding:"10px 14px", border: yaIngreso ? "2px solid #4CAF50" : "2px solid transparent", transition:"background 0.3s" }}>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:8 }}>
         <div style={{ flex:1 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
             <span style={{ fontWeight:700, fontSize:14, color:"#fff" }}>{h.nombre} {h.apellido}</span>
             <span style={{ fontSize:11, fontWeight:700, background:lbl.bg, color:lbl.color, padding:"2px 8px", borderRadius:12 }}>{lbl.text}</span>
+            {yaIngreso && (
+              <span style={{ fontSize:11, fontWeight:700, background:"rgba(76,175,80,0.3)", color:"#A5D6A7", padding:"2px 8px", borderRadius:12 }}>
+                🏠 Ingresó {reg.horaIngreso ? `a las ${reg.horaIngreso}` : ""}
+              </span>
+            )}
           </div>
           <div style={{ fontSize:12, color:"rgba(255,255,255,0.75)", display:"flex", flexWrap:"wrap", gap:6, alignItems:"center" }}>
             {h.id && !h.id.startsWith("h")
@@ -143,9 +160,26 @@ function HuespedGlobo({ h, fecha, showId=false }) {
             {h.horaIngreso && <span>· Ingreso: {h.horaIngreso}</span>}
           </div>
         </div>
-        <div style={{ textAlign:"right", whiteSpace:"nowrap" }}>
-          <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)" }}>Estadía</div>
-          <div style={{ fontSize:12, color:"rgba(255,255,255,0.9)", fontWeight:500 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+          <div style={{ textAlign:"right", whiteSpace:"nowrap" }}>
+            <div style={{ fontSize:11, color:"rgba(255,255,255,0.5)" }}>Estadía</div>
+            <div style={{ fontSize:12, color:"rgba(255,255,255,0.9)", fontWeight:500 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
+          </div>
+          {/* BOTÓN MARCAR INGRESO */}
+          {onMarcarIngreso && (
+            <button
+              onClick={e => { e.stopPropagation(); onMarcarIngreso(h); }}
+              style={{
+                background: yaIngreso ? "rgba(76,175,80,0.25)" : "rgba(255,255,255,0.18)",
+                border: yaIngreso ? "1px solid rgba(76,175,80,0.5)" : "1px solid rgba(255,255,255,0.35)",
+                color: yaIngreso ? "#A5D6A7" : "#fff",
+                borderRadius:7, padding:"4px 10px", fontSize:11, fontWeight:700, cursor:"pointer",
+                whiteSpace:"nowrap"
+              }}
+            >
+              {yaIngreso ? "✓ Ingresado" : "🔑 Marcar ingreso"}
+            </button>
+          )}
         </div>
       </div>
       {(h.cochera||h.patente||h.vehiculo) && (
@@ -181,30 +215,21 @@ function Login({ onLogin }) {
   );
 }
 
-// ─── MODAL EDITAR HUÉSPED ──────────────────────────────────────────
 function EditHuespedModal({ huesped, onSave, onClose }) {
   const [form, setForm] = useState({ ...huesped });
-  const labels = {
-    id:"ID / DNI", nombre:"Nombre", apellido:"Apellido", depto:"Departamento",
-    ingreso:"Fecha ingreso", salida:"Fecha salida", horaIngreso:"Hora ingreso",
-    cochera:"Cochera asignada", patente:"Patente", vehiculo:"Marca/Modelo"
-  };
+  const labels = { id:"ID / DNI", nombre:"Nombre", apellido:"Apellido", depto:"Departamento", ingreso:"Fecha ingreso", salida:"Fecha salida", horaIngreso:"Hora ingreso", cochera:"Cochera asignada", patente:"Patente", vehiculo:"Marca/Modelo" };
   const fields = ["id","nombre","apellido","depto","ingreso","salida","horaIngreso","cochera","patente","vehiculo"];
   return (
-    <Modal title={`Editar huésped: ${huesped.nombre} ${huesped.apellido}`} onClose={onClose}>
+    <Modal title={`Editar: ${huesped.nombre} ${huesped.apellido}`} onClose={onClose}>
       {fields.map(k => (
         <Field key={k} label={labels[k]}>
-          <input
-            value={form[k]||""}
-            onChange={e => setForm(f => ({...f, [k]: e.target.value}))}
-            style={S.input}
-            type={k==="ingreso"||k==="salida"?"date": k==="horaIngreso"?"time":"text"}
-          />
+          <input value={form[k]||""} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={S.input}
+            type={k==="ingreso"||k==="salida"?"date":k==="horaIngreso"?"time":"text"} />
         </Field>
       ))}
       <div style={{ display:"flex", gap:10, marginTop:8 }}>
         <button onClick={onClose} style={{ ...S.btnSecondary, flex:1 }}>Cancelar</button>
-        <button onClick={() => onSave(form)} style={{ ...S.btnPrimary, flex:1 }}>Guardar cambios</button>
+        <button onClick={()=>onSave(form)} style={{ ...S.btnPrimary, flex:1 }}>Guardar cambios</button>
       </div>
     </Modal>
   );
@@ -212,14 +237,15 @@ function EditHuespedModal({ huesped, onSave, onClose }) {
 
 // ─── APP PRINCIPAL ─────────────────────────────────────────────────
 export default function App() {
-  const [userRole, setUserRole] = useState("general");
-  const [tab, setTab] = useState("deptos");
-  const [deptos, setDeptos] = useState([]);
+  const [fbReady, setFbReady]     = useState(false);
+  const [userRole, setUserRole]   = useState("general");
+  const [tab, setTab]             = useState("deptos");
+  const [deptos, setDeptos]       = useState([]);
   const [huespedes, setHuespedes] = useState([]);
   const [registros, setRegistros] = useState({});
   const [selectedDepto, setSelectedDepto] = useState(null);
-  const [viewDate, setViewDate] = useState(TODAY);
-  const [showAddH, setShowAddH] = useState(false);
+  const [viewDate, setViewDate]   = useState(TODAY);
+  const [showAddH, setShowAddH]   = useState(false);
   const [showImportH, setShowImportH] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showConfirmBorrar, setShowConfirmBorrar] = useState(false);
@@ -227,46 +253,58 @@ export default function App() {
   const [editHuesped, setEditHuesped] = useState(null);
   const [importMsg, setImportMsg] = useState("");
   const [importError, setImportError] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [loading, setLoading]     = useState(true);
+  // ── NUEVOS: buscadores ──────────────────────────────────────────
+  const [searchDeptos, setSearchDeptos] = useState("");   // pestaña Departamentos
+  const [searchAdmin, setSearchAdmin]   = useState("");   // pestaña Admin
+  const [searchDia, setSearchDia]       = useState("");   // pestaña Huéspedes por día
   const fileDRef = useRef();
 
-  // ── Firebase listeners ──────────────────────────────────────────
+  // ── Firebase init ───────────────────────────────────────────────
   useEffect(() => {
-    let loaded = 0;
-    const done = () => { loaded++; if (loaded >= 3) setLoading(false); };
-
-    const unD = fbListen("deptos",    v => { setDeptos(v ? Object.values(v) : []); done(); });
-    const unH = fbListen("huespedes", v => { setHuespedes(v ? Object.values(v) : []); done(); });
-    const unR = fbListen("registros", v => { setRegistros(v || {}); done(); });
-
-    return () => { unD(); unH(); unR(); };
+    initFirebase().then(() => {
+      setFbReady(true);
+      let loaded = 0;
+      const done = () => { loaded++; if (loaded >= 3) setLoading(false); };
+      fbListen("deptos",    v => { setDeptos(v ? Object.values(v) : []); done(); });
+      fbListen("huespedes", v => { setHuespedes(v ? Object.values(v) : []); done(); });
+      fbListen("registros", v => { setRegistros(v || {}); done(); });
+    });
   }, []);
 
-  // ── Persistencia Firebase ───────────────────────────────────────
   const saveDeptos    = list => fbSet("deptos",    Object.fromEntries(list.map(d => [d.id.replace(/[.#$/[\]]/g,"_"), d])));
   const saveHuespedes = list => fbSet("huespedes", Object.fromEntries(list.map(h => [h.id.replace(/[.#$/[\]]/g,"_"), h])));
   const saveRegistros = obj  => fbSet("registros", obj);
-
   const setD = v => saveDeptos(v);
   const setH = v => saveHuespedes(v);
   const setR = v => saveRegistros(v);
   const updateReg = (hid, patch) => {
-    const u = { ...registros, [hid]: { ...(registros[hid]||{}), ...patch } };
+    const safeKey = hid.replace(/[.#$/[\]]/g,"_");
+    const u = { ...registros, [safeKey]: { ...(registros[safeKey]||{}), ...patch } };
     setR(u);
   };
-
-  const toast = (msg, isError=false) => {
-    setImportError(isError); setImportMsg(msg);
-    setTimeout(() => setImportMsg(""), 5000);
-  };
+  const toast = (msg, isError=false) => { setImportError(isError); setImportMsg(msg); setTimeout(()=>setImportMsg(""),5000); };
 
   const isAdmin = userRole === "admin";
 
+  // ── Marcar ingreso ──────────────────────────────────────────────
+  const handleMarcarIngreso = (h) => {
+    const safeKey = h.id.replace(/[.#$/[\]]/g,"_");
+    const reg = registros[safeKey] || {};
+    if (reg.ingresado) {
+      // toggle off
+      updateReg(h.id, { ingresado: false, horaIngreso: "" });
+      toast("Ingreso desmarcado.");
+    } else {
+      const hora = nowTimeStr();
+      updateReg(h.id, { ingresado: true, horaIngreso: hora });
+      toast(`✓ Ingreso registrado a las ${hora} para ${h.nombre} ${h.apellido}`);
+    }
+  };
+
   // ── Editar huésped ──────────────────────────────────────────────
   const handleEditSave = (updated) => {
-    const newList = huespedes.map(h => h.id === editHuesped.id ? updated : h);
-    setH(newList);
+    setH(huespedes.map(h => h.id === editHuesped.id ? updated : h));
     setEditHuesped(null);
     toast("✓ Huésped actualizado correctamente.");
   };
@@ -281,64 +319,47 @@ export default function App() {
     })).filter(r=>r.id||r.nombre).map(d=>({...d,id:d.id||d.nombre}));
     setD(list); toast(`✓ ${list.length} departamentos cargados.`);
   }
-
   function parseHuesped(r, i) {
     const nombreCompleto = findField(r,["nombre_y_apellido","nombre_apellido"]);
     let nombre="", apellido="";
-    if (nombreCompleto) {
-      const p = nombreCompleto.trim().split(/\s+/);
-      nombre = p[0]||""; apellido = p.slice(1).join(" ")||"";
-    } else {
-      nombre = findField(r,["nombre","name","first"]);
-      apellido = findField(r,["apellido","last","surname"]);
-    }
-    const keys = Object.keys(r);
-    const idKey = keys.find(k => k === "id") || keys.find(k => k.startsWith("id"));
-    const docId = (idKey && r[idKey]) ? r[idKey] : findField(r,["dni","pasaporte","documento","passport","doc"]);
-    const rawIngreso = findField(r,["fecha_ingreso","fecha_de_ingreso","ingreso","checkin","check_in","entrada","from","inicio"]);
-    const rawSalida  = findField(r,["fecha_salida","fecha_de_salida","salida","checkout","check_out","hasta","to","fin"]);
-    const horaIngreso = findField(r,["hora_ingreso","hora_de_ingreso","hora"]);
-    const cocheraRaw  = findField(r,["usa_cochera","cochera"]);
-    const patente     = findField(r,["patente"]);
-    const vehiculo    = findField(r,["marca_o_modelo","modelo","vehiculo","auto"]);
-    const cochera = (cocheraRaw&&cocheraRaw!=="0"&&cocheraRaw.toLowerCase()!=="false") ? cocheraRaw : "";
+    if (nombreCompleto) { const p=nombreCompleto.trim().split(/\s+/); nombre=p[0]||""; apellido=p.slice(1).join(" ")||""; }
+    else { nombre=findField(r,["nombre","name","first"]); apellido=findField(r,["apellido","last","surname"]); }
+    const keys=Object.keys(r);
+    const idKey=keys.find(k=>k==="id")||keys.find(k=>k.startsWith("id"));
+    const docId=(idKey&&r[idKey])?r[idKey]:findField(r,["dni","pasaporte","documento","passport","doc"]);
+    const rawIngreso=findField(r,["fecha_ingreso","fecha_de_ingreso","ingreso","checkin","check_in","entrada","from","inicio"]);
+    const rawSalida=findField(r,["fecha_salida","fecha_de_salida","salida","checkout","check_out","hasta","to","fin"]);
+    const horaIngreso=findField(r,["hora_ingreso","hora_de_ingreso","hora"]);
+    const cocheraRaw=findField(r,["usa_cochera","cochera"]);
+    const patente=findField(r,["patente"]);
+    const vehiculo=findField(r,["marca_o_modelo","modelo","vehiculo","auto"]);
+    const cochera=(cocheraRaw&&cocheraRaw!=="0"&&cocheraRaw.toLowerCase()!=="false")?cocheraRaw:"";
     return {
-      id: docId || `h${Date.now()}${i}`,
-      nombre, apellido,
-      depto: String(findField(r,["depto","dept","apartamento","apt","habitacion","unit"])||"").replace(/\.0$/,""),
-      ingreso: toISODate(rawIngreso), salida: toISODate(rawSalida),
-      horaIngreso: horaIngreso||"", cochera,
-      patente: patente&&patente!=="0"?patente:"",
-      vehiculo: vehiculo&&vehiculo!=="0"?vehiculo:"",
+      id:docId||`h${Date.now()}${i}`, nombre, apellido,
+      depto:String(findField(r,["depto","dept","apartamento","apt","habitacion","unit"])||"").replace(/\.0$/,""),
+      ingreso:toISODate(rawIngreso), salida:toISODate(rawSalida),
+      horaIngreso:horaIngreso||"", cochera,
+      patente:patente&&patente!=="0"?patente:"",
+      vehiculo:vehiculo&&vehiculo!=="0"?vehiculo:"",
     };
   }
-
   function importHuespedes(text, replace=false) {
-    const {rows} = parseCSV(text);
-    const incoming = rows.map((r,i) => parseHuesped(r,i)).filter(r=>r.nombre||r.apellido);
+    const {rows}=parseCSV(text);
+    const incoming=rows.map((r,i)=>parseHuesped(r,i)).filter(r=>r.nombre||r.apellido);
     if (replace) { setH(incoming); toast(`✓ ${incoming.length} huéspedes cargados.`); return; }
-    const existingIds = new Set(huespedes.filter(h => !h.id.startsWith("h")).map(h => h.id));
-    const nuevos = [], duplicados = [];
-    incoming.forEach(h => {
-      if (!h.id.startsWith("h") && existingIds.has(h.id)) duplicados.push(h);
-      else nuevos.push(h);
-    });
-    if (nuevos.length === 0) { toast(`⚠️ No se agregaron huéspedes: los ${duplicados.length} del CSV ya estaban cargados.`, true); return; }
-    setH([...huespedes, ...nuevos]);
-    if (duplicados.length > 0) toast(`✓ ${nuevos.length} huésped(es) agregado(s). Se omitieron ${duplicados.length} duplicado(s).`);
+    const existingIds=new Set(huespedes.filter(h=>!h.id.startsWith("h")).map(h=>h.id));
+    const nuevos=[],duplicados=[];
+    incoming.forEach(h=>{ if (!h.id.startsWith("h")&&existingIds.has(h.id)) duplicados.push(h); else nuevos.push(h); });
+    if (nuevos.length===0) { toast(`⚠️ No se agregaron huéspedes: los ${duplicados.length} del CSV ya estaban cargados.`,true); return; }
+    setH([...huespedes,...nuevos]);
+    if (duplicados.length>0) toast(`✓ ${nuevos.length} huésped(es) agregado(s). Se omitieron ${duplicados.length} duplicado(s).`);
     else toast(`✓ ${nuevos.length} huésped(es) agregado(s).`);
   }
 
-  function huespedesEnFecha(fecha) {
-    return huespedes.filter(h=>h.ingreso&&h.salida&&h.ingreso<=fecha&&h.salida>=fecha);
-  }
+  function huespedesEnFecha(fecha) { return huespedes.filter(h=>h.ingreso&&h.salida&&h.ingreso<=fecha&&h.salida>=fecha); }
   function huespedesDeDepto(deptoId, fecha) {
     const tid=(deptoId||"").trim().toLowerCase();
-    return huespedes.filter(h=>{
-      if ((h.depto||"").trim().toLowerCase()!==tid) return false;
-      if (!h.ingreso||!h.salida) return true;
-      return h.ingreso<=fecha&&h.salida>=fecha;
-    });
+    return huespedes.filter(h=>{ if ((h.depto||"").trim().toLowerCase()!==tid) return false; if (!h.ingreso||!h.salida) return true; return h.ingreso<=fecha&&h.salida>=fecha; });
   }
   function deptoStatus(dId) {
     if (huespedesDeDepto(dId,TODAY).length>0) return "ocupado";
@@ -346,14 +367,13 @@ export default function App() {
     if (huespedes.some(h=>(h.depto||"").trim().toLowerCase()===dId.trim().toLowerCase()&&h.ingreso>TODAY&&h.ingreso<=in3)) return "proximo";
     return "libre";
   }
-
   function generarCSV() {
-    const lista = huespedesEnFecha(viewDate);
-    if (!lista.length) { toast("No hay huéspedes para esta fecha.", true); return; }
-    const cols = ["Depto","Nombre","Apellido","ID/DNI","Ingreso","Salida","Hora Ingreso","Cochera","Patente","Vehículo","Estado"];
-    const rows = lista.map(h=>[h.depto,h.nombre,h.apellido,h.id.startsWith("h")?"":h.id,fmtDate(h.ingreso),fmtDate(h.salida),h.horaIngreso||"",h.cochera||"",h.patente||"",h.vehiculo||"",getHuespedStatus(h,viewDate)]);
-    const csv = [cols,...rows].map(r=>r.join(",")).join("\n");
-    setShowCSVModal({ csv, fecha: viewDate, count: lista.length });
+    const lista=huespedesEnFecha(viewDate);
+    if (!lista.length) { toast("No hay huéspedes para esta fecha.",true); return; }
+    const cols=["Depto","Nombre","Apellido","ID/DNI","Ingreso","Salida","Hora Ingreso","Cochera","Patente","Vehículo","Estado"];
+    const rows=lista.map(h=>[h.depto,h.nombre,h.apellido,h.id.startsWith("h")?"":h.id,fmtDate(h.ingreso),fmtDate(h.salida),h.horaIngreso||"",h.cochera||"",h.patente||"",h.vehiculo||"",getHuespedStatus(h,viewDate)]);
+    const csv=[cols,...rows].map(r=>r.join(",")).join("\n");
+    setShowCSVModal({csv,fecha:viewDate,count:lista.length});
   }
 
   if (showAdminLogin) return <Login onLogin={role=>{setUserRole(role);setShowAdminLogin(false);setTab("admin");}} />;
@@ -366,14 +386,35 @@ export default function App() {
     </div>
   );
 
-  const tabs = [
-    {id:"deptos", label:"🏠 Departamentos"},
-    {id:"huespedes", label:"👥 Huéspedes por día"},
-    isAdmin ? {id:"admin", label:"⚙️ Administración"} : {id:"adminLogin", label:"🔐 Admin"},
+  const tabs=[
+    {id:"deptos",label:"🏠 Departamentos"},
+    {id:"huespedes",label:"👥 Huéspedes por día"},
+    isAdmin?{id:"admin",label:"⚙️ Administración"}:{id:"adminLogin",label:"🔐 Admin"},
   ];
-  const filteredDeptos = deptos.filter(d=>!search||(d.id+d.nombre+d.piso).toLowerCase().includes(search.toLowerCase()));
+
+  // ── Filtros ─────────────────────────────────────────────────────
+  const filteredDeptos = deptos.filter(d => {
+    if (!searchDeptos) return true;
+    const q=searchDeptos.toLowerCase();
+    return (d.id+d.nombre+d.piso).toLowerCase().includes(q);
+  });
+
   const hoyEnFecha = huespedesEnFecha(viewDate);
-  const handleTab = id => { if (id==="adminLogin"){setShowAdminLogin(true);return;} setTab(id); };
+  const filteredDia = searchDia
+    ? hoyEnFecha.filter(h => {
+        const q=searchDia.toLowerCase();
+        return `${h.nombre} ${h.apellido}`.toLowerCase().includes(q) || (h.depto||"").toLowerCase().includes(q);
+      })
+    : hoyEnFecha;
+
+  const filteredAdmin = searchAdmin
+    ? huespedes.filter(h => {
+        const q=searchAdmin.toLowerCase();
+        return `${h.nombre} ${h.apellido}`.toLowerCase().includes(q) || (h.depto||"").toLowerCase().includes(q) || (h.id||"").toLowerCase().includes(q);
+      })
+    : huespedes;
+
+  const handleTab=id=>{ if (id==="adminLogin"){setShowAdminLogin(true);return;} setTab(id); };
 
   return (
     <div style={{ fontFamily:"'Inter',system-ui,sans-serif", background:C.bg, minHeight:"100vh", color:C.text }}>
@@ -409,7 +450,8 @@ export default function App() {
           <div>
             <SectionHeader title="Departamentos" subtitle={`Estado al día de hoy · ${deptos.length} departamentos`} />
             <div style={{ display:"flex", gap:8, marginBottom:"1rem", flexWrap:"wrap", alignItems:"center" }}>
-              <input placeholder="🔍  Buscar..." value={search} onChange={e=>setSearch(e.target.value)} style={{ ...S.input, width:220, flex:"0 0 auto" }} />
+              {/* buscador de deptos */}
+              <input placeholder="🔍  Buscar depto..." value={searchDeptos} onChange={e=>setSearchDeptos(e.target.value)} style={{ ...S.input, width:220, flex:"0 0 auto" }} />
               <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
                 <span style={{ fontSize:12, fontWeight:600, background:C.accentLight, color:C.accent, padding:"4px 12px", borderRadius:20 }}>🔵 Check-in</span>
                 <span style={{ fontSize:12, fontWeight:600, background:C.greenBg, color:C.green, padding:"4px 12px", borderRadius:20 }}>🟢 In-house</span>
@@ -424,10 +466,10 @@ export default function App() {
               </div>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                {filteredDeptos.map(d => {
-                  const status = deptoStatus(d.id);
-                  const hList = huespedesDeDepto(d.id, TODAY);
-                  const statusColor = status==="ocupado"?"green":status==="proximo"?"amber":"gray";
+                {filteredDeptos.map(d=>{
+                  const status=deptoStatus(d.id);
+                  const hList=huespedesDeDepto(d.id,TODAY);
+                  const statusColor=status==="ocupado"?"green":status==="proximo"?"amber":"gray";
                   return (
                     <div key={d.id} onClick={()=>setSelectedDepto(d)}
                       style={{ ...S.card, background:C.cardGray, cursor:"pointer", padding:"14px 16px" }}
@@ -440,8 +482,8 @@ export default function App() {
                           {d.piso && <div style={{ fontSize:11, color:C.textTer, marginTop:2 }}>Piso {d.piso}</div>}
                         </div>
                         <div style={{ flex:1, fontSize:13, color:C.textSec }}>
-                          {hList.length===0 && <span>Sin huésped hoy</span>}
-                          {hList.length>0 && <span style={{ fontWeight:500, color:C.text }}>{hList.length} huésped{hList.length>1?"es":""} alojado{hList.length>1?"s":""}</span>}
+                          {hList.length===0&&<span>Sin huésped hoy</span>}
+                          {hList.length>0&&<span style={{ fontWeight:500, color:C.text }}>{hList.length} huésped{hList.length>1?"es":""} alojado{hList.length>1?"s":""}</span>}
                         </div>
                         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
                           <Badge color={statusColor}>{status==="ocupado"?"Ocupado":status==="proximo"?"Próximo":"Libre"}</Badge>
@@ -449,8 +491,8 @@ export default function App() {
                         </div>
                       </div>
                       {hList.length>0 && (
-                        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                          {hList.map(h => <HuespedGlobo key={h.id} h={h} fecha={TODAY} />)}
+                        <div style={{ display:"flex", flexDirection:"column", gap:8 }} onClick={e=>e.stopPropagation()}>
+                          {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={handleMarcarIngreso} />)}
                         </div>
                       )}
                     </div>
@@ -465,17 +507,17 @@ export default function App() {
         {tab==="huespedes" && (
           <div>
             <SectionHeader title="Huéspedes por día" subtitle="Vista de todos los departamentos ocupados en la fecha seleccionada" />
-            <div style={{ ...S.card, display:"flex", alignItems:"center", gap:16, marginBottom:"1.5rem", flexWrap:"wrap", background:C.accentLight, borderColor:"#C3D5F5" }}>
+            <div style={{ ...S.card, display:"flex", alignItems:"center", gap:16, marginBottom:"1rem", flexWrap:"wrap", background:C.accentLight, borderColor:"#C3D5F5" }}>
               <div>
                 <div style={{ fontSize:12, fontWeight:600, color:C.accent, marginBottom:4, textTransform:"uppercase", letterSpacing:0.5 }}>Fecha</div>
                 <input type="date" value={viewDate} onChange={e=>setViewDate(e.target.value)} style={{ ...S.input, width:"auto", border:`1px solid ${C.accent}` }} />
               </div>
               <div style={{ display:"flex", gap:16, alignItems:"center", flexWrap:"wrap" }}>
                 {[
-                  {label:"total", val:hoyEnFecha.length, color:C.navy},
-                  {label:"check-in", val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkin").length, color:C.accent},
-                  {label:"in-house", val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="inhouse").length, color:C.green},
-                  {label:"check-out", val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkout").length, color:C.red},
+                  {label:"total",val:hoyEnFecha.length,color:C.navy},
+                  {label:"check-in",val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkin").length,color:C.accent},
+                  {label:"in-house",val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="inhouse").length,color:C.green},
+                  {label:"check-out",val:hoyEnFecha.filter(h=>getHuespedStatus(h,viewDate)==="checkout").length,color:C.red},
                 ].map(s=>(
                   <div key={s.label} style={{ textAlign:"center" }}>
                     <div style={{ fontSize:24, fontWeight:800, color:s.color }}>{s.val}</div>
@@ -487,30 +529,44 @@ export default function App() {
                 <button onClick={generarCSV} style={{ ...S.btnPrimary, display:"flex", alignItems:"center", gap:6, whiteSpace:"nowrap" }}>⬇ Descargar listado</button>
               </div>
             </div>
+
+            {/* BUSCADOR por día */}
+            <div style={{ marginBottom:"1rem" }}>
+              <input
+                placeholder="🔍  Buscar por nombre o depto..."
+                value={searchDia}
+                onChange={e=>setSearchDia(e.target.value)}
+                style={{ ...S.input, maxWidth:320 }}
+              />
+            </div>
+
             <div style={{ display:"flex", gap:10, marginBottom:"1.25rem", flexWrap:"wrap" }}>
               <span style={{ fontSize:12, fontWeight:600, background:C.accentLight, color:C.accent, padding:"4px 12px", borderRadius:20 }}>🔵 Check-in hoy</span>
               <span style={{ fontSize:12, fontWeight:600, background:C.greenBg, color:C.green, padding:"4px 12px", borderRadius:20 }}>🟢 In-house</span>
               <span style={{ fontSize:12, fontWeight:600, background:C.redBg, color:C.red, padding:"4px 12px", borderRadius:20 }}>🔴 Check-out hoy</span>
             </div>
-            {hoyEnFecha.length===0 ? (
-              <div style={{ ...S.card, textAlign:"center", padding:"3rem", color:C.textSec, fontSize:14 }}>Sin huéspedes alojados para esta fecha.</div>
+
+            {filteredDia.length===0 ? (
+              <div style={{ ...S.card, textAlign:"center", padding:"3rem", color:C.textSec, fontSize:14 }}>
+                {hoyEnFecha.length===0 ? "Sin huéspedes alojados para esta fecha." : "Sin resultados para la búsqueda."}
+              </div>
             ) : (() => {
-              const grouped = {};
-              hoyEnFecha.forEach(h=>{ const k=h.depto||"Sin depto"; if(!grouped[k]) grouped[k]=[]; grouped[k].push(h); });
-              const entries = Object.entries(grouped).sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true}));
+              const grouped={};
+              filteredDia.forEach(h=>{ const k=h.depto||"Sin depto"; if(!grouped[k]) grouped[k]=[]; grouped[k].push(h); });
+              const entries=Object.entries(grouped).sort(([a],[b])=>a.localeCompare(b,undefined,{numeric:true}));
               return (
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(300px, 1fr))", gap:14 }}>
                   {entries.map(([dep,hs])=>{
-                    const hasCheckout = hs.some(h=>getHuespedStatus(h,viewDate)==="checkout");
-                    const hasCheckin  = hs.some(h=>getHuespedStatus(h,viewDate)==="checkin");
-                    const cardBorder  = hasCheckout?C.red:hasCheckin?C.accent:C.green;
+                    const hasCheckout=hs.some(h=>getHuespedStatus(h,viewDate)==="checkout");
+                    const hasCheckin=hs.some(h=>getHuespedStatus(h,viewDate)==="checkin");
+                    const cardBorder=hasCheckout?C.red:hasCheckin?C.accent:C.green;
                     return (
                       <div key={dep} style={{ background:C.cardGray, borderRadius:14, border:`2px solid ${cardBorder}`, overflow:"hidden", boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
                         <div style={{ background:"#3A4252", padding:"10px 14px" }}>
                           <span style={{ fontWeight:700, fontSize:15, color:"#fff" }}>Depto {dep}</span>
                         </div>
                         <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
-                          {hs.map(h=><HuespedGlobo key={h.id} h={h} fecha={viewDate} showId={true} />)}
+                          {hs.map(h=><HuespedGlobo key={h.id} h={h} fecha={viewDate} registros={registros} onMarcarIngreso={handleMarcarIngreso} />)}
                         </div>
                       </div>
                     );
@@ -551,15 +607,27 @@ export default function App() {
               </div>
             </div>
 
-            <div style={{ fontWeight:700, fontSize:16, color:C.navy, marginBottom:"1rem" }}>Listado de huéspedes</div>
-            {huespedes.length===0 ? (
-              <div style={{ ...S.card, textAlign:"center", padding:"2rem", color:C.textSec, fontSize:14 }}>Sin datos.</div>
+            {/* BUSCADOR admin */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"1rem", flexWrap:"wrap", gap:10 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:C.navy }}>Listado de huéspedes ({filteredAdmin.length})</div>
+              <input
+                placeholder="🔍  Buscar por nombre, depto o ID..."
+                value={searchAdmin}
+                onChange={e=>setSearchAdmin(e.target.value)}
+                style={{ ...S.input, maxWidth:320, width:"auto" }}
+              />
+            </div>
+
+            {filteredAdmin.length===0 ? (
+              <div style={{ ...S.card, textAlign:"center", padding:"2rem", color:C.textSec, fontSize:14 }}>
+                {huespedes.length===0 ? "Sin datos." : "Sin resultados para la búsqueda."}
+              </div>
             ) : (
               <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {huespedes.map(h=>(
+                {filteredAdmin.map(h=>(
                   <div key={h.id} style={{ ...S.card, display:"flex", gap:10, alignItems:"center", padding:"10px 14px", flexWrap:"wrap" }}>
-                    <div style={{ background: h.id.startsWith("h") ? C.grayBg : C.accentLight, color: h.id.startsWith("h") ? C.textTer : C.accent, fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:6, whiteSpace:"nowrap" }}>
-                      🪪 {h.id.startsWith("h") ? "Sin ID" : h.id}
+                    <div style={{ background:h.id.startsWith("h")?C.grayBg:C.accentLight, color:h.id.startsWith("h")?C.textTer:C.accent, fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:6, whiteSpace:"nowrap" }}>
+                      🪪 {h.id.startsWith("h")?"Sin ID":h.id}
                     </div>
                     <div style={{ flex:1, fontWeight:600, fontSize:14 }}>{h.nombre} {h.apellido}</div>
                     <Badge color="blue">Depto {h.depto}</Badge>
@@ -590,15 +658,15 @@ export default function App() {
 
       {/* MODAL: detalle depto */}
       {selectedDepto && (() => {
-        const d = selectedDepto;
-        const hList = huespedesDeDepto(d.id, TODAY);
-        const reg = hList.length>0 ? (registros[hList[0].id]||{}) : {};
+        const d=selectedDepto;
+        const hList=huespedesDeDepto(d.id,TODAY);
+        const reg=hList.length>0?(registros[hList[0].id]||{}):{}; 
         return (
           <Modal title={`Depto ${d.nombre||d.id}${d.piso?` · Piso ${d.piso}`:""}`} onClose={()=>setSelectedDepto(null)}>
             {hList.length>0 ? (
               <>
                 <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
-                  {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} showId={true} />)}
+                  {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={handleMarcarIngreso} />)}
                 </div>
                 <Field label="Hora de ingreso real">
                   <input type="time" defaultValue={reg.horaIngreso||""} onChange={e=>updateReg(hList[0].id,{horaIngreso:e.target.value})} style={S.input} />
@@ -634,17 +702,17 @@ export default function App() {
       {/* MODAL: agregar huésped */}
       {showAddH && (() => {
         const AddForm = () => {
-          const [form, setForm] = useState({ id:"", nombre:"", apellido:"", depto:"", ingreso:"", salida:"", horaIngreso:"", cochera:"", patente:"", vehiculo:"" });
-          const labels = { id:"ID / DNI", nombre:"Nombre", apellido:"Apellido", depto:"Departamento", ingreso:"Fecha ingreso", salida:"Fecha salida", horaIngreso:"Hora ingreso", cochera:"Cochera asignada", patente:"Patente", vehiculo:"Marca/Modelo" };
+          const [form,setForm]=useState({id:"",nombre:"",apellido:"",depto:"",ingreso:"",salida:"",horaIngreso:"",cochera:"",patente:"",vehiculo:""});
+          const labels={id:"ID / DNI",nombre:"Nombre",apellido:"Apellido",depto:"Departamento",ingreso:"Fecha ingreso",salida:"Fecha salida",horaIngreso:"Hora ingreso",cochera:"Cochera asignada",patente:"Patente",vehiculo:"Marca/Modelo"};
           return (
             <Modal title="Agregar huésped" onClose={()=>setShowAddH(false)}>
               {["id","nombre","apellido","depto","ingreso","salida","horaIngreso","cochera","patente","vehiculo"].map(k=>(
                 <Field key={k} label={labels[k]}>
-                  <input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}
-                    style={S.input} type={k==="ingreso"||k==="salida"?"date":k==="horaIngreso"?"time":"text"} />
+                  <input value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} style={S.input}
+                    type={k==="ingreso"||k==="salida"?"date":k==="horaIngreso"?"time":"text"} />
                 </Field>
               ))}
-              <button onClick={()=>{ setH([...huespedes,{...form,id:form.id||`h${Date.now()}`}]); setShowAddH(false); }}
+              <button onClick={()=>{setH([...huespedes,{...form,id:form.id||`h${Date.now()}`}]);setShowAddH(false);}}
                 style={{ ...S.btnPrimary, width:"100%", marginTop:8 }}>Guardar huésped</button>
             </Modal>
           );
@@ -656,9 +724,7 @@ export default function App() {
       {showImportH && (
         <Modal title={showImportH==="replace"?"Reemplazar huéspedes (CSV)":"Agregar huéspedes (CSV)"} onClose={()=>setShowImportH(false)}>
           <p style={{ fontSize:13, color:C.textSec, marginTop:0 }}>
-            {showImportH==="replace"
-              ? "⚠️ Esto reemplazará todos los huéspedes actuales."
-              : "Solo se agregarán los huéspedes nuevos. Los que ya existan (mismo ID) se omitirán automáticamente."}
+            {showImportH==="replace"?"⚠️ Esto reemplazará todos los huéspedes actuales.":"Solo se agregarán los huéspedes nuevos. Los que ya existan (mismo ID) se omitirán automáticamente."}
           </p>
           <div style={{ background:C.bg, borderRadius:8, padding:"10px 12px", fontSize:12, color:C.textSec, marginBottom:14 }}>
             <b>Columnas reconocidas:</b><br/>
@@ -675,25 +741,17 @@ export default function App() {
       {/* MODAL: CSV listado del día */}
       {showCSVModal && (
         <Modal title={`📋 Listado ${showCSVModal.fecha} · ${showCSVModal.count} huéspedes`} onClose={()=>setShowCSVModal(null)}>
-          <p style={{ fontSize:13, color:C.textSec, margin:"0 0 10px" }}>
-            Copiá el contenido y pegalo en Excel o Google Sheets.
-          </p>
+          <p style={{ fontSize:13, color:C.textSec, margin:"0 0 10px" }}>Copiá el contenido y pegalo en Excel o Google Sheets.</p>
           <textarea readOnly value={showCSVModal.csv} onFocus={e=>e.target.select()}
             style={{ ...S.input, fontFamily:"monospace", fontSize:11, minHeight:240, resize:"vertical", background:C.bg }} />
-          <button onClick={()=>{ navigator.clipboard.writeText(showCSVModal.csv); toast("✓ Copiado al portapapeles"); }}
+          <button onClick={()=>{navigator.clipboard.writeText(showCSVModal.csv);toast("✓ Copiado al portapapeles");}}
             style={{ ...S.btnPrimary, width:"100%", marginTop:10 }}>📋 Copiar al portapapeles</button>
           <button onClick={()=>setShowCSVModal(null)} style={{ ...S.btnSecondary, width:"100%", marginTop:8 }}>Cerrar</button>
         </Modal>
       )}
 
       {/* MODAL: editar huésped */}
-      {editHuesped && (
-        <EditHuespedModal
-          huesped={editHuesped}
-          onSave={handleEditSave}
-          onClose={()=>setEditHuesped(null)}
-        />
-      )}
+      {editHuesped && <EditHuespedModal huesped={editHuesped} onSave={handleEditSave} onClose={()=>setEditHuesped(null)} />}
     </div>
   );
 }
