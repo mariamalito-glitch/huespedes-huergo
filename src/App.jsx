@@ -492,7 +492,7 @@ export default function App() {
                       </div>
                       {hList.length>0 && (
                         <div style={{ display:"flex", flexDirection:"column", gap:8 }} onClick={e=>e.stopPropagation()}>
-                          {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={handleMarcarIngreso} />)}
+                          {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={getHuespedStatus(h,TODAY)==="checkin"?handleMarcarIngreso:null} />)}
                         </div>
                       )}
                     </div>
@@ -566,7 +566,7 @@ export default function App() {
                           <span style={{ fontWeight:700, fontSize:15, color:"#fff" }}>Depto {dep}</span>
                         </div>
                         <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
-                          {hs.map(h=><HuespedGlobo key={h.id} h={h} fecha={viewDate} registros={registros} onMarcarIngreso={handleMarcarIngreso} />)}
+                          {hs.map(h=><HuespedGlobo key={h.id} h={h} fecha={viewDate} registros={registros} onMarcarIngreso={getHuespedStatus(h,viewDate)==="checkin"?handleMarcarIngreso:null} />)}
                         </div>
                       </div>
                     );
@@ -666,7 +666,7 @@ export default function App() {
             {hList.length>0 ? (
               <>
                 <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
-                  {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={handleMarcarIngreso} />)}
+                  {hList.map(h=><HuespedGlobo key={h.id} h={h} fecha={TODAY} registros={registros} onMarcarIngreso={getHuespedStatus(h,TODAY)==="checkin"?handleMarcarIngreso:null} />)}
                 </div>
                 <Field label="Hora de ingreso real">
                   <input type="time" defaultValue={reg.horaIngreso||""} onChange={e=>updateReg(hList[0].id,{horaIngreso:e.target.value})} style={S.input} />
