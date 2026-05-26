@@ -148,6 +148,23 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg }) {
               {reg.salidaMarcada  && <span style={{ fontSize: 11, background: "rgba(183,28,28,0.4)", color: "#EF9A9A", padding: "2px 8px", borderRadius: 6 }}>✓ Salió {reg.horaSalidaReal || ""}</span>}
             </div>
           )}
+          {/* Botones de acción visibles siempre */}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+            {h.ingreso === fecha && !reg.ingresoMarcado && onUpdateReg && (
+              <button
+                onClick={e => { e.stopPropagation(); const hora = new Date().toTimeString().slice(0,5); onUpdateReg({ ingresoMarcado: true, horaIngresoReal: hora }) }}
+                style={{ flex: 1, fontSize: 13, fontWeight: 700, padding: "9px 0", borderRadius: 8, border: "2px solid #81C784", background: "rgba(46,125,50,0.5)", color: "#fff", cursor: "pointer", letterSpacing: 0.3 }}>
+                ✓ Marcar ingreso
+              </button>
+            )}
+            {h.salida === fecha && !reg.salidaMarcada && onUpdateReg && (
+              <button
+                onClick={e => { e.stopPropagation(); const hora = new Date().toTimeString().slice(0,5); onUpdateReg({ salidaMarcada: true, horaSalidaReal: hora }) }}
+                style={{ flex: 1, fontSize: 13, fontWeight: 700, padding: "9px 0", borderRadius: 8, border: "2px solid #EF9A9A", background: "rgba(183,28,28,0.5)", color: "#fff", cursor: "pointer", letterSpacing: 0.3 }}>
+                ↑ Marcar salida
+              </button>
+            )}
+          </div>
           <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.4)" }}>✏ Tocá para editar</div>
         </>
       ) : (
@@ -174,14 +191,6 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg }) {
           <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
             <button onClick={save} style={{ flex: 1, fontSize: 12, fontWeight: 700, padding: "7px 0", borderRadius: 7, border: "none", background: "#2E7D32", color: "#fff", cursor: "pointer" }}>✓ Guardar</button>
             <button onClick={cancel} style={{ fontSize: 12, padding: "7px 14px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#fff", cursor: "pointer" }}>Cancelar</button>
-            {h.salida === fecha && !reg.salidaMarcada && onUpdateReg && (
-              <button onClick={() => { const hora = new Date().toTimeString().slice(0,5); onUpdateReg({ salidaMarcada: true, horaSalidaReal: hora }) }}
-                style={{ fontSize: 12, padding: "7px 14px", borderRadius: 7, border: "1px solid #EF9A9A", background: "rgba(183,28,28,0.4)", color: "#EF9A9A", cursor: "pointer", fontWeight: 600 }}>↑ Salida</button>
-            )}
-            {h.ingreso === fecha && !reg.ingresoMarcado && onUpdateReg && (
-              <button onClick={() => { const hora = new Date().toTimeString().slice(0,5); onUpdateReg({ ingresoMarcado: true, horaIngresoReal: hora }) }}
-                style={{ fontSize: 12, padding: "7px 14px", borderRadius: 7, border: "1px solid #81C784", background: "rgba(46,125,50,0.4)", color: "#A5D6A7", cursor: "pointer", fontWeight: 600 }}>✓ Ingreso</button>
-            )}
           </div>
         </div>
       )}
