@@ -321,15 +321,19 @@ export default function App() {
     toast(`✓ ${mapped.length} huéspedes ${replace ? "reemplazados" : "agregados"}.`)
   }
 
-  function normDepto(val) {
-    const s = (val || "").trim().toLowerCase()
-    if (/^\d+$/.test(s)) return s
-    const m = s.match(/(\d+[a-z]?)$/)
-    return m ? m[1] : s
+  // Extrae todos los bloques numéricos de un string: "310 H475" → ["310", "475"]
+  function extractNums(val) {
+    return ((val || "").match(/\d+/g) || [])
   }
+  // Dos deptos coinciden si comparten AL MENOS un bloque numérico
   function deptoMatch(deptoId, hDepto) {
-    const a = normDepto(deptoId), b = normDepto(hDepto)
-    return a === b || (deptoId || "").trim().toLowerCase() === (hDepto || "").trim().toLowerCase()
+    if (!deptoId || !hDepto) return false
+    const a = (deptoId || "").trim().toLowerCase()
+    const b = (hDepto  || "").trim().toLowerCase()
+    if (a === b) return true
+    const numsA = extractNums(a)
+    const numsB = extractNums(b)
+    return numsA.length > 0 && numsB.length > 0 && numsA.some(n => numsB.includes(n))
   }
   function huespedesEnFecha(fecha) {
     return huespedes.filter(h => h.ingreso && h.salida && h.ingreso <= fecha && h.salida >= fecha)
@@ -620,7 +624,7 @@ export default function App() {
         const d = selectedDepto
         const hActual    = huespedesDeDepto(d.id, TODAY)
         const hProximos  = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.ingreso && hx.ingreso > TODAY).sort((a,b) => a.ingreso.localeCompare(b.ingreso))
-        const hHistorial = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.salida  && hx.salida  < TODAY).sort((a,b) => b.salida.localeCompare(a.salida))
+        const hHistorial = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.salida  && hx.salida  <= TODAY && !(hx.ingreso <= TODAY && hx.salida >= TODAY)).sort((a,b) => b.salida.localeCompare(a.salida))
         const status     = deptoStatus(d.id)
 
         const ModalDetalle = () => {
@@ -683,31 +687,62 @@ export default function App() {
 
               {modalTab === "historial" && (
                 hHistorial.length === 0
-                  ? <div style={{ textAlign: "center", padding: "2rem 0", color: C.textSec, fontSize: 14 }}>Sin historial.</div>
-                  : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {hHistorial.map(hx => {
-                      const regHx = registros[hx.id] || {}
-                      return (
-                        <div key={hx.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 14px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 13, color: C.navy }}>{hx.nombre} {hx.apellido}</div>
-                              <div style={{ fontSize: 11, color: C.textSec, marginTop: 2 }}>
-                                {hx.id && <span style={{ marginRight: 8 }}>DNI: {hx.id}</span>}
-                                {hx.cochera && <span>🚗 {hx.cochera}</span>}
+                  ? <div style={{ textAlign: "center", padding: "2rem 0", color: C.textSec, fontSize: 14 }}>Sin historial de reservas.</div>
+                  : <>
+                    <div style={{ fontSize: 12, color: C.textSec, marginBottom: 10 }}>
+                      {hHistorial.length} reserva{hHistorial.length !== 1 ? "s" : ""} anteriores
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {hHistorial.map((hx, idx) => {
+                        const regHx = registros[hx.id] || {}
+                        const noches = hx.ingreso && hx.salida
+                          ? Math.round((new Date(hx.salida) - new Date(hx.ingreso)) / 86400000)
+                          : null
+                        return (
+                          <div key={hx.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+                            {/* Cabecera con fechas */}
+                            <div style={{ background: C.navy, padding: "7px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>
+                                {fmtDate(hx.ingreso)} → {fmtDate(hx.salida)}
+                              </span>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                {noches !== null && (
+                                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{noches} noche{noches !== 1 ? "s" : ""}</span>
+                                )}
+                                <span style={{ fontSize: 10, background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.8)", padding: "2px 8px", borderRadius: 10 }}>
+                                  #{idx + 1}
+                                </span>
                               </div>
                             </div>
-                            <div style={{ textAlign: "right", flexShrink: 0 }}>
-                              <div style={{ fontSize: 12, color: C.textSec }}>{fmtDate(hx.ingreso)} → {fmtDate(hx.salida)}</div>
-                              {regHx.horaIngresoReal && <div style={{ fontSize: 10, color: C.textTer }}>Ingresó: {regHx.horaIngresoReal}</div>}
-                              {regHx.horaSalidaReal  && <div style={{ fontSize: 10, color: C.textTer }}>Salió: {regHx.horaSalidaReal}</div>}
+                            {/* Datos del huésped */}
+                            <div style={{ padding: "10px 14px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: 14, color: C.navy }}>{hx.nombre} {hx.apellido}</div>
+                                  <div style={{ fontSize: 12, color: C.textSec, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                    {hx.id      && <span>DNI: {hx.id}</span>}
+                                    {hx.cochera && <span>🚗 Cochera {hx.cochera}</span>}
+                                    {hx.patente && <span>Patente: {hx.patente}</span>}
+                                    {hx.vehiculo&& <span>{hx.vehiculo}</span>}
+                                  </div>
+                                </div>
+                                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                  {hx.horaIngreso && <div style={{ fontSize: 11, color: C.textSec }}>Hora estimada: {hx.horaIngreso}</div>}
+                                  {regHx.horaIngresoReal && <div style={{ fontSize: 11, color: C.green }}>✓ Ingresó: {regHx.horaIngresoReal}</div>}
+                                  {regHx.horaSalidaReal  && <div style={{ fontSize: 11, color: C.amber }}>↑ Salió: {regHx.horaSalidaReal}</div>}
+                                </div>
+                              </div>
+                              {regHx.comentario && (
+                                <div style={{ marginTop: 8, fontSize: 12, color: C.textSec, fontStyle: "italic", borderTop: `1px solid ${C.border}`, paddingTop: 7 }}>
+                                  💬 {regHx.comentario}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {regHx.comentario && <div style={{ marginTop: 6, fontSize: 11, color: C.textSec, fontStyle: "italic", borderTop: `1px solid ${C.border}`, paddingTop: 5 }}>💬 {regHx.comentario}</div>}
-                        </div>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  </>
               )}
               <button onClick={() => setSelectedDepto(null)} style={{ ...S.btnSecondary, width: "100%", marginTop: 16 }}>Cerrar</button>
             </Modal>
