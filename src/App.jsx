@@ -299,8 +299,28 @@ export default function App() {
   const setD = v => { setDeptos(v);    persist(STORAGE_KEYS.deptos,    v) }
   const setH = v => { setHuespedes(v); persist(STORAGE_KEYS.huespedes, v) }
   const setR = v => { setRegistros(v); persist(STORAGE_KEYS.registros, v) }
-  const updateHuesped = (id, patch) => setH(huespedes.map(h => h.id === id ? { ...h, ...patch } : h))
-  const updateReg = (hid, patch) => { const u = { ...registros, [hid]: { ...(registros[hid] || {}), ...patch } }; setR(u) }
+
+  const deleteHuesped = (id) => {
+    setHuespedes(prev => {
+      const next = prev.filter(h => h.id !== id)
+      persist(STORAGE_KEYS.huespedes, next)
+      return next
+    })
+  }
+  const updateHuesped = (id, patch) => {
+    setHuespedes(prev => {
+      const next = prev.map(h => h.id === id ? { ...h, ...patch } : h)
+      persist(STORAGE_KEYS.huespedes, next)
+      return next
+    })
+  }
+  const updateReg = (hid, patch) => {
+    setRegistros(prev => {
+      const next = { ...prev, [hid]: { ...(prev[hid] || {}), ...patch } }
+      persist(STORAGE_KEYS.registros, next)
+      return next
+    })
+  }
   const toast = msg => { setImportMsg(msg); setTimeout(() => setImportMsg(""), 4000) }
   const isAdmin = userRole === "admin"
 
@@ -529,7 +549,7 @@ export default function App() {
                               <HuespedCard h={h} reg={registros[h.id] || {}} fecha={TODAY}
                                 onUpdate={patch => updateHuesped(h.id, patch)}
                                 onUpdateReg={patch => updateReg(h.id, patch)}
-                                onDelete={() => setH(huespedes.filter(x => x.id !== h.id))} />
+                                onDelete={() => deleteHuesped(h.id)} />
                             </div>
                           ))}
                         </div>
@@ -601,7 +621,7 @@ export default function App() {
                             <HuespedCard h={h} reg={registros[h.id] || {}} fecha={viewDate}
                               onUpdate={patch => updateHuesped(h.id, patch)}
                               onUpdateReg={patch => updateReg(h.id, patch)}
-                              onDelete={() => setH(huespedes.filter(x => x.id !== h.id))} />
+                              onDelete={() => deleteHuesped(h.id)} />
                           </div>
                         ))}
                       </div>
@@ -656,7 +676,7 @@ export default function App() {
                         <div style={{ fontSize: 12, color: C.textSec }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
                         {h.cochera && <Badge color="gray">🚗 Cochera {h.cochera}</Badge>}
                         <button onClick={() => setEditingHId(h.id)} style={{ ...S.btnSecondary, fontSize: 12, padding: "5px 12px" }}>✏ Editar</button>
-                        <button onClick={() => setH(huespedes.filter(x => x.id !== h.id))} style={S.btnDanger}>Eliminar</button>
+                        <button onClick={() => deleteHuesped(h.id)} style={S.btnDanger}>Eliminar</button>
                       </div>
                     ) : (
                       <HuespedEditForm h={h}
