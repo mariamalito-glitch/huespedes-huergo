@@ -104,8 +104,9 @@ function cardBgForHuesped(h, fecha, reg) {
   return { bg: "#1B4332", border: "1.5px solid #2D6A4F" }
 }
 
-function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg }) {
+function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDelete }) {
   const [editing, setEditing] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ ...h })
   const { bg, border } = cardBgForHuesped(h, fecha, reg)
 
@@ -165,7 +166,28 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg }) {
               </button>
             )}
           </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: "rgba(255,255,255,0.4)" }}>✏ Tocá para editar</div>
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>✏ Tocá para editar</span>
+            {!confirmDelete ? (
+              <button
+                onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(255,80,80,0.5)", background: "rgba(183,28,28,0.25)", color: "#EF9A9A", cursor: "pointer", fontWeight: 600 }}>
+                🗑 Eliminar
+              </button>
+            ) : (
+              <div onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "#EF9A9A" }}>¿Confirmar?</span>
+                <button onClick={() => onDelete && onDelete()}
+                  style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "none", background: C.red, color: "#fff", cursor: "pointer", fontWeight: 700 }}>
+                  Sí, eliminar
+                </button>
+                <button onClick={() => setConfirmDelete(false)}
+                  style={{ fontSize: 11, padding: "3px 10px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.3)", background: "transparent", color: "#fff", cursor: "pointer" }}>
+                  Cancelar
+                </button>
+              </div>
+            )}
+          </div>
         </>
       ) : (
         <div onClick={e => e.stopPropagation()}>
@@ -284,17 +306,27 @@ export default function App() {
 
   function importDeptos(text) {
     const { rows } = parseCSV(text)
-    const list = rows.map(r => ({
+    const nuevos = rows.map(r => ({
       id:     findField(r, ["id","codigo","code","numero","num"]) || findField(r, [Object.keys(r)[0]]),
       nombre: findField(r, ["nombre","name","descripcion","depto","apt"]) || findField(r, [Object.keys(r)[0]]),
       piso:   findField(r, ["piso","floor","nivel"]),
     })).filter(r => r.id || r.nombre).map(d => ({ ...d, id: d.id || d.nombre }))
-    setD(list); toast(`✓ ${list.length} departamentos cargados.`)
+
+    // Merge: si ya existe un depto con el mismo id, lo actualiza; si no, lo agrega
+    const merged = [...deptos]
+    let agregados = 0, actualizados = 0
+    nuevos.forEach(nd => {
+      const idx = merged.findIndex(d => d.id === nd.id)
+      if (idx >= 0) { merged[idx] = { ...merged[idx], ...nd }; actualizados++ }
+      else { merged.push(nd); agregados++ }
+    })
+    setD(merged)
+    toast(`✓ ${agregados} nuevos · ${actualizados} actualizados · ${merged.length} total`)
   }
 
   function importHuespedes(text, replace = false) {
     const { rows } = parseCSV(text)
-    const mapped = rows.map((r, i) => {
+    const nuevos = rows.map((r, i) => {
       const nombreCompleto = findField(r, ["nombre_y_apellido","nombre_apellido","nombre"])
       let nombre = "", apellido = ""
       if (nombreCompleto) { const p = nombreCompleto.trim().split(/\s+/); nombre = p[0] || ""; apellido = p.slice(1).join(" ") || "" }
@@ -317,8 +349,26 @@ export default function App() {
         vehiculo: vehiculo && vehiculo !== "0" ? vehiculo : "",
       }
     }).filter(r => r.nombre || r.apellido)
-    setH(replace ? mapped : [...huespedes, ...mapped])
-    toast(`✓ ${mapped.length} huéspedes ${replace ? "reemplazados" : "agregados"}.`)
+
+    if (replace) {
+      setH(nuevos)
+      toast(`✓ ${nuevos.length} huéspedes cargados (reemplazo total).`)
+      return
+    }
+
+    // Merge: detecta duplicado por id + depto + ingreso + salida
+    const base = [...huespedes]
+    let agregados = 0, omitidos = 0
+    nuevos.forEach(nh => {
+      const esDuplicado = base.some(h =>
+        h.id === nh.id ||
+        (h.nombre === nh.nombre && h.apellido === nh.apellido && h.depto === nh.depto && h.ingreso === nh.ingreso && h.salida === nh.salida)
+      )
+      if (esDuplicado) { omitidos++; return }
+      base.push(nh); agregados++
+    })
+    setH(base)
+    toast(`✓ ${agregados} agregados · ${omitidos} duplicados omitidos · ${base.length} total`)
   }
 
   // Extrae todos los bloques numéricos de un string: "310 H475" → ["310", "475"]
@@ -478,7 +528,8 @@ export default function App() {
                             <div key={h.id} style={{ marginBottom: idx < hList.length - 1 ? 8 : 0 }}>
                               <HuespedCard h={h} reg={registros[h.id] || {}} fecha={TODAY}
                                 onUpdate={patch => updateHuesped(h.id, patch)}
-                                onUpdateReg={patch => updateReg(h.id, patch)} />
+                                onUpdateReg={patch => updateReg(h.id, patch)}
+                                onDelete={() => setH(huespedes.filter(x => x.id !== h.id))} />
                             </div>
                           ))}
                         </div>
@@ -549,7 +600,8 @@ export default function App() {
                           <div key={h.id} style={{ marginBottom: idx < hs.length - 1 ? 8 : 0 }}>
                             <HuespedCard h={h} reg={registros[h.id] || {}} fecha={viewDate}
                               onUpdate={patch => updateHuesped(h.id, patch)}
-                              onUpdateReg={patch => updateReg(h.id, patch)} />
+                              onUpdateReg={patch => updateReg(h.id, patch)}
+                              onDelete={() => setH(huespedes.filter(x => x.id !== h.id))} />
                           </div>
                         ))}
                       </div>
