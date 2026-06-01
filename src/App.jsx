@@ -284,6 +284,8 @@ export default function App() {
   const [searchDepto, setSearchDepto] = useState("")
   const [filtroEstado, setFiltroEstado] = useState("todos")
   const [editingHId, setEditingHId] = useState(null)
+  const [searchAdmin, setSearchAdmin] = useState("")
+  const [searchAdminMode, setSearchAdminMode] = useState("huesped") // "huesped" | "depto"
   const fileDRef = useRef()
 
   // ── Suscripciones en tiempo real a Firestore ──
@@ -661,6 +663,156 @@ export default function App() {
                 </div>
               </div>
             </div>
+            {/* ── BUSCADOR ── */}
+            <div style={{ ...S.card, marginBottom: "1.5rem", borderTop: `4px solid ${C.accent}` }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: C.navy, marginBottom: 12 }}>🔍 Buscador</div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                <button onClick={() => setSearchAdminMode("huesped")} style={{ fontSize: 13, fontWeight: 600, padding: "7px 16px", borderRadius: 20, border: `2px solid ${C.accent}`, cursor: "pointer", background: searchAdminMode === "huesped" ? C.accent : "transparent", color: searchAdminMode === "huesped" ? "#fff" : C.accent }}>👤 Por huésped</button>
+                <button onClick={() => setSearchAdminMode("depto")} style={{ fontSize: 13, fontWeight: 600, padding: "7px 16px", borderRadius: 20, border: `2px solid ${C.navy}`, cursor: "pointer", background: searchAdminMode === "depto" ? C.navy : "transparent", color: searchAdminMode === "depto" ? "#fff" : C.navy }}>🏠 Por depto</button>
+              </div>
+              <input
+                placeholder={searchAdminMode === "huesped" ? "🔍  Buscar por nombre, apellido o DNI..." : "🔍  Buscar por número o nombre de departamento..."}
+                value={searchAdmin}
+                onChange={e => setSearchAdmin(e.target.value)}
+                style={{ ...S.input, marginBottom: 14 }}
+              />
+              {searchAdmin.trim().length > 0 && (() => {
+                const q = searchAdmin.trim().toLowerCase()
+                if (searchAdminMode === "huesped") {
+                  const resultados = huespedes.filter(h =>
+                    (h.nombre || "").toLowerCase().includes(q) ||
+                    (h.apellido || "").toLowerCase().includes(q) ||
+                    (h.id || "").toLowerCase().includes(q)
+                  ).sort((a, b) => (b.ingreso || "").localeCompare(a.ingreso || ""))
+                  return resultados.length === 0
+                    ? <div style={{ textAlign: "center", padding: "1.5rem", color: C.textSec, fontSize: 14 }}>Sin resultados para "{searchAdmin}".</div>
+                    : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ fontSize: 12, color: C.textSec, marginBottom: 4 }}>{resultados.length} resultado{resultados.length !== 1 ? "s" : ""}</div>
+                        {resultados.map(h => {
+                          const reg = registros[h.id] || {}
+                          const pasado = h.salida < TODAY
+                          const futuro = h.ingreso > TODAY
+                          const statusColor = pasado ? "gray" : futuro ? "amber" : "green"
+                          const statusLabel = pasado ? "Finalizado" : futuro ? "Próximo" : "Activo"
+                          return (
+                            <div key={h.id} style={{ ...S.card, padding: "12px 14px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 700, fontSize: 15, color: C.navy }}>{h.nombre} {h.apellido}</div>
+                                  <div style={{ fontSize: 12, color: C.textSec, marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                    {h.id && <span>DNI: {h.id}</span>}
+                                    <span style={{ fontWeight: 600, color: C.accent }}>Depto {h.depto || "—"}</span>
+                                    <span>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</span>
+                                    {h.horaIngreso && <span>Hora: {h.horaIngreso}</span>}
+                                    {h.cochera && <span>🚗 Cochera {h.cochera}</span>}
+                                    {h.patente && <span>Patente: {h.patente}</span>}
+                                  </div>
+                                  {(reg.ingresoMarcado || reg.salidaMarcada || reg.comentario) && (
+                                    <div style={{ fontSize: 11, color: C.textSec, marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                      {reg.ingresoMarcado && <span style={{ color: C.green }}>✓ Ingresó {reg.horaIngresoReal || ""}</span>}
+                                      {reg.salidaMarcada  && <span style={{ color: C.amber }}>↑ Salió {reg.horaSalidaReal || ""}</span>}
+                                      {reg.comentario     && <span style={{ fontStyle: "italic" }}>💬 {reg.comentario}</span>}
+                                    </div>
+                                  )}
+                                </div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end", flexShrink: 0 }}>
+                                  <Badge color={statusColor}>{statusLabel}</Badge>
+                                  <div style={{ display: "flex", gap: 6 }}>
+                                    <button onClick={() => setEditingHId(h.id)} style={{ ...S.btnSecondary, fontSize: 12, padding: "5px 10px" }}>✏ Editar</button>
+                                    <button onClick={() => deleteHuesped(h.id)} style={S.btnDanger}>Eliminar</button>
+                                  </div>
+                                </div>
+                              </div>
+                              {editingHId === h.id && (
+                                <div style={{ marginTop: 10 }}>
+                                  <HuespedEditForm h={h}
+                                    onSave={patch => { updateHuesped(h.id, patch); setEditingHId(null); toast("✓ Huésped actualizado.") }}
+                                    onCancel={() => setEditingHId(null)} />
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                }
+                const resultadosDeptos = deptos.filter(d =>
+                  (d.id || "").toLowerCase().includes(q) ||
+                  (d.nombre || "").toLowerCase().includes(q) ||
+                  (d.piso || "").toLowerCase().includes(q)
+                )
+                const sinDepto = resultadosDeptos.length === 0
+                  ? huespedes.filter(h => (h.depto || "").toLowerCase().includes(q))
+                    .map(h => h.depto).filter((v, i, a) => a.indexOf(v) === i)
+                    .map(id => ({ id, nombre: id, piso: "" }))
+                  : []
+                const todos = [...resultadosDeptos, ...sinDepto]
+                return todos.length === 0
+                  ? <div style={{ textAlign: "center", padding: "1.5rem", color: C.textSec, fontSize: 14 }}>Sin resultados para "{searchAdmin}".</div>
+                  : <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ fontSize: 12, color: C.textSec, marginBottom: 4 }}>{todos.length} departamento{todos.length !== 1 ? "s" : ""}</div>
+                      {todos.map(d => {
+                        const status = deptoStatus(d.id)
+                        const statusColor = status === "ocupado" ? "green" : status === "proximo" ? "amber" : "gray"
+                        const hActual = huespedesDeDepto(d.id, TODAY)
+                        const hProximos = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.ingreso && hx.ingreso > TODAY).sort((a, b) => a.ingreso.localeCompare(b.ingreso))
+                        const hHistorial = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.salida && hx.salida < TODAY).sort((a, b) => b.salida.localeCompare(a.salida))
+                        return (
+                          <div key={d.id} style={{ ...S.card, padding: "14px 16px", borderLeft: `4px solid ${status === "ocupado" ? C.green : status === "proximo" ? C.amber : C.border}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                              <div>
+                                <span style={{ fontWeight: 700, fontSize: 16, color: C.navy }}>{d.nombre || d.id}</span>
+                                {d.piso && <span style={{ fontSize: 12, color: C.textTer, marginLeft: 8 }}>Piso {d.piso}</span>}
+                              </div>
+                              <Badge color={statusColor}>{status === "ocupado" ? "Ocupado" : status === "proximo" ? "Próximo" : "Libre"}</Badge>
+                            </div>
+                            {hActual.length > 0 && (
+                              <div style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.green, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Huésped actual</div>
+                                {hActual.map(h => (
+                                  <div key={h.id} style={{ background: C.greenBg, border: `1px solid #A5D6A7`, borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 4 }}>
+                                    <span style={{ fontWeight: 600, color: C.navy }}>{h.nombre} {h.apellido}</span>
+                                    {h.id && <span style={{ color: C.textSec, marginLeft: 8 }}>DNI: {h.id}</span>}
+                                    <span style={{ color: C.textSec, marginLeft: 8 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</span>
+                                    {h.cochera && <span style={{ color: C.textSec, marginLeft: 8 }}>🚗 {h.cochera}</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {hProximos.length > 0 && (
+                              <div style={{ marginBottom: 10 }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Próximas reservas ({hProximos.length})</div>
+                                {hProximos.slice(0, 3).map(h => (
+                                  <div key={h.id} style={{ background: C.amberBg, border: `1px solid #FCD34D`, borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 4 }}>
+                                    <span style={{ fontWeight: 600, color: C.navy }}>{h.nombre} {h.apellido}</span>
+                                    <span style={{ color: C.textSec, marginLeft: 8 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</span>
+                                    <span style={{ color: C.amber, fontWeight: 600, marginLeft: 8 }}>en {Math.round((new Date(h.ingreso) - new Date(TODAY)) / 86400000)}d</span>
+                                  </div>
+                                ))}
+                                {hProximos.length > 3 && <div style={{ fontSize: 12, color: C.textSec, marginTop: 4 }}>+ {hProximos.length - 3} más...</div>}
+                              </div>
+                            )}
+                            {hHistorial.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.gray, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Historial ({hHistorial.length} estadías)</div>
+                                {hHistorial.slice(0, 2).map(h => (
+                                  <div key={h.id} style={{ background: C.grayBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 4 }}>
+                                    <span style={{ fontWeight: 600, color: C.navy }}>{h.nombre} {h.apellido}</span>
+                                    <span style={{ color: C.textSec, marginLeft: 8 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</span>
+                                  </div>
+                                ))}
+                                {hHistorial.length > 2 && <div style={{ fontSize: 12, color: C.textSec, marginTop: 4 }}>+ {hHistorial.length - 2} estadías anteriores...</div>}
+                              </div>
+                            )}
+                            {hActual.length === 0 && hProximos.length === 0 && hHistorial.length === 0 && (
+                              <div style={{ fontSize: 13, color: C.textTer, fontStyle: "italic" }}>Sin reservas registradas.</div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+              })()}
+            </div>
+
             <div style={{ fontWeight: 700, fontSize: 16, color: C.navy, marginBottom: "1rem" }}>Listado de huéspedes</div>
             {huespedes.length === 0 ? (
               <div style={{ ...S.card, textAlign: "center", padding: "2rem", color: C.textSec, fontSize: 14 }}>Sin datos.</div>
