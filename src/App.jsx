@@ -127,7 +127,7 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDele
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{h.nombre} {h.apellido}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.65)", marginTop: 3, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {h.id && <span style={{ background: "rgba(255,255,255,0.15)", padding: "1px 7px", borderRadius: 5 }}>DNI: {h.id}</span>}
+                {h.dni && <span style={{ background: "rgba(255,255,255,0.15)", padding: "1px 7px", borderRadius: 5 }}>DNI: {h.dni}</span>}
                 {h.horaIngreso && <span>Ingreso: {h.horaIngreso}</span>}
               </div>
             </div>
@@ -195,7 +195,7 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDele
         <div onClick={e => e.stopPropagation()}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#fff", marginBottom: 10 }}>✏ Editando huésped</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-            {[["Nombre","nombre","text"],["Apellido","apellido","text"],["DNI / ID","id","text"],["Departamento","depto","text"],
+            {[["Nombre","nombre","text"],["Apellido","apellido","text"],["DNI","dni","text"],["Departamento","depto","text"],
               ["Fecha ingreso","ingreso","date"],["Fecha salida","salida","date"],["Hora ingreso","horaIngreso","time"],
               ["Cochera","cochera","text"],["Patente","patente","text"],["Vehículo","vehiculo","text"]
             ].map(([label, key, type]) => (
@@ -234,7 +234,7 @@ function HuespedEditForm({ h, onSave, onCancel }) {
     <div style={{ background: C.accentLight, border: `1px solid #C3D5F5`, borderRadius: 10, padding: "14px 16px" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
         {inp("nombre","text","Nombre")}{inp("apellido","text","Apellido")}
-        {inp("id","text","DNI / ID")}{inp("depto","text","Departamento")}
+        {inp("dni","text","DNI")}{inp("depto","text","Departamento")}
         {inp("ingreso","date","Fecha ingreso")}{inp("salida","date","Fecha salida")}
         {inp("horaIngreso","time","Hora ingreso")}{inp("cochera","text","Cochera")}
         {inp("patente","text","Patente")}{inp("vehiculo","text","Vehículo")}
@@ -359,12 +359,14 @@ export default function App() {
       const rawSalida   = findField(r, ["fecha_salida","fecha_de_salida","salida","checkout","check_out","hasta","to","fin"])
       const horaIngreso = findField(r, ["hora_ingreso","hora_de_ingreso","hora"])
       const cocheraRaw  = findField(r, ["usa_cochera","cochera"])
+      const dniVal      = findField(r, ["id","dni","documento","doc","cedula","pasaporte","passport"])
       const patente     = findField(r, ["patente"])
       const vehiculo    = findField(r, ["marca_o_modelo","modelo","vehiculo","auto"])
       let cochera = ""
       if (cocheraRaw && cocheraRaw !== "0" && cocheraRaw.toLowerCase() !== "false") cochera = cocheraRaw
       return {
-        id: findField(r, ["id"]) || `h${Date.now()}${i}`,
+        id: `h${Date.now()}${i}`,
+        dni: dniVal || "",
         nombre, apellido,
         depto: String(findField(r, ["depto","dept","apartamento","apt","habitacion","unit"]) || "").replace(/\.0$/, ""),
         ingreso: toISODate(rawIngreso), salida: toISODate(rawSalida),
@@ -385,7 +387,7 @@ export default function App() {
     let agregados = 0, omitidos = 0
     nuevos.forEach(nh => {
       const esDuplicado = base.some(h =>
-        h.id === nh.id ||
+        (nh.dni && h.dni === nh.dni && h.ingreso === nh.ingreso && h.salida === nh.salida) ||
         (h.nombre === nh.nombre && h.apellido === nh.apellido && h.depto === nh.depto && h.ingreso === nh.ingreso && h.salida === nh.salida)
       )
       if (esDuplicado) { omitidos++; return }
@@ -435,7 +437,7 @@ export default function App() {
     const inhouse = huespedesEnFecha(fecha).filter(h => getHuespedStatus(h, fecha) === "inhouse")
     if (inhouse.length === 0) { toast("No hay huéspedes in-house para esta fecha."); return }
     const cols = ["Depto","Nombre","Apellido","ID/DNI","Ingreso","Salida","Hora Ingreso","Cochera","Patente","Vehículo"]
-    const rows = inhouse.map(h => [h.depto,h.nombre,h.apellido,h.id,fmtDate(h.ingreso),fmtDate(h.salida),h.horaIngreso||"",h.cochera||"",h.patente||"",h.vehiculo||""])
+    const rows = inhouse.map(h => [h.depto,h.nombre,h.apellido,h.dni||"",fmtDate(h.ingreso),fmtDate(h.salida),h.horaIngreso||"",h.cochera||"",h.patente||"",h.vehiculo||""])
     const csv = [cols,...rows].map(r => r.map(v => `"${(v||"").toString().replace(/"/g,'""')}"`).join(",")).join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
@@ -685,7 +687,7 @@ export default function App() {
                   const resultados = huespedes.filter(h =>
                     (h.nombre || "").toLowerCase().includes(q) ||
                     (h.apellido || "").toLowerCase().includes(q) ||
-                    (h.id || "").toLowerCase().includes(q)
+                    (h.dni || "").toLowerCase().includes(q)
                   ).sort((a, b) => (b.ingreso || "").localeCompare(a.ingreso || ""))
                   return resultados.length === 0
                     ? <div style={{ textAlign: "center", padding: "1.5rem", color: C.textSec, fontSize: 14 }}>Sin resultados para "{searchAdmin}".</div>
@@ -703,7 +705,7 @@ export default function App() {
                                 <div style={{ flex: 1 }}>
                                   <div style={{ fontWeight: 700, fontSize: 15, color: C.navy }}>{h.nombre} {h.apellido}</div>
                                   <div style={{ fontSize: 12, color: C.textSec, marginTop: 4, display: "flex", gap: 10, flexWrap: "wrap" }}>
-                                    {h.id && <span>DNI: {h.id}</span>}
+                                    {h.dni && <span>DNI: {h.dni}</span>}
                                     <span style={{ fontWeight: 600, color: C.accent }}>Depto {h.depto || "—"}</span>
                                     <span>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</span>
                                     {h.horaIngreso && <span>Hora: {h.horaIngreso}</span>}
@@ -774,7 +776,7 @@ export default function App() {
                                 {hActual.map(h => (
                                   <div key={h.id} style={{ background: C.greenBg, border: `1px solid #A5D6A7`, borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 4 }}>
                                     <span style={{ fontWeight: 600, color: C.navy }}>{h.nombre} {h.apellido}</span>
-                                    {h.id && <span style={{ color: C.textSec, marginLeft: 8 }}>DNI: {h.id}</span>}
+                                    {h.dni && <span style={{ color: C.textSec, marginLeft: 8 }}>DNI: {h.dni}</span>}
                                     <span style={{ color: C.textSec, marginLeft: 8 }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</span>
                                     {h.cochera && <span style={{ color: C.textSec, marginLeft: 8 }}>🚗 {h.cochera}</span>}
                                   </div>
@@ -825,7 +827,7 @@ export default function App() {
                   <div key={h.id}>
                     {editingHId !== h.id ? (
                       <div style={{ ...S.card, display: "flex", gap: 10, alignItems: "center", padding: "10px 14px", flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 11, color: C.textTer, minWidth: 60 }}>#{h.id}</div>
+                        <div style={{ fontSize: 11, color: C.textTer, minWidth: 60 }}>{h.dni ? `DNI: ${h.dni}` : "—"}</div>
                         <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>{h.nombre} {h.apellido}</div>
                         <Badge color="blue">Depto {h.depto}</Badge>
                         <div style={{ fontSize: 12, color: C.textSec }}>{fmtDate(h.ingreso)} → {fmtDate(h.salida)}</div>
@@ -896,7 +898,7 @@ export default function App() {
                             <div>
                               <div style={{ fontWeight: 700, fontSize: 14, color: C.navy }}>{hx.nombre} {hx.apellido}</div>
                               <div style={{ fontSize: 12, color: C.textSec, marginTop: 3 }}>
-                                {hx.id && <span style={{ marginRight: 8 }}>DNI: {hx.id}</span>}
+                                {hx.dni && <span style={{ marginRight: 8 }}>DNI: {hx.dni}</span>}
                                 {hx.cochera && <span>🚗 Cochera {hx.cochera}</span>}
                               </div>
                             </div>
@@ -947,7 +949,7 @@ export default function App() {
                                 <div>
                                   <div style={{ fontWeight: 700, fontSize: 14, color: C.navy }}>{hx.nombre} {hx.apellido}</div>
                                   <div style={{ fontSize: 12, color: C.textSec, marginTop: 3, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                                    {hx.id      && <span>DNI: {hx.id}</span>}
+                                    {hx.dni      && <span>DNI: {hx.dni}</span>}
                                     {hx.cochera && <span>🚗 Cochera {hx.cochera}</span>}
                                     {hx.patente && <span>Patente: {hx.patente}</span>}
                                     {hx.vehiculo&& <span>{hx.vehiculo}</span>}
@@ -981,17 +983,17 @@ export default function App() {
       {/* MODAL: agregar huésped */}
       {showAddH && (() => {
         const AddForm = () => {
-          const [form, setForm] = useState({ id: "", nombre: "", apellido: "", depto: "", ingreso: "", salida: "", horaIngreso: "", cochera: "", patente: "", vehiculo: "" })
-          const labels = { id: "ID / DNI", nombre: "Nombre", apellido: "Apellido", depto: "Departamento", ingreso: "Fecha ingreso", salida: "Fecha salida", horaIngreso: "Hora ingreso", cochera: "Cochera asignada", patente: "Patente", vehiculo: "Marca/Modelo" }
+          const [form, setForm] = useState({ dni: "", nombre: "", apellido: "", depto: "", ingreso: "", salida: "", horaIngreso: "", cochera: "", patente: "", vehiculo: "" })
+          const labels = { dni: "DNI", nombre: "Nombre", apellido: "Apellido", depto: "Departamento", ingreso: "Fecha ingreso", salida: "Fecha salida", horaIngreso: "Hora ingreso", cochera: "Cochera asignada", patente: "Patente", vehiculo: "Marca/Modelo" }
           return (
             <Modal title="Agregar huésped" onClose={() => setShowAddH(false)}>
-              {["id","nombre","apellido","depto","ingreso","salida","horaIngreso","cochera","patente","vehiculo"].map(k => (
+              {["dni","nombre","apellido","depto","ingreso","salida","horaIngreso","cochera","patente","vehiculo"].map(k => (
                 <Field key={k} label={labels[k]}>
                   <input value={form[k]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
                     style={S.input} type={k === "ingreso" || k === "salida" ? "date" : k === "horaIngreso" ? "time" : "text"} />
                 </Field>
               ))}
-              <button onClick={() => { setH([...huespedes, { ...form, id: form.id || `h${Date.now()}` }]); setShowAddH(false) }}
+              <button onClick={() => { setH([...huespedes, { ...form, id: `h${Date.now()}` }]); setShowAddH(false) }}
                 style={{ ...S.btnPrimary, width: "100%", marginTop: 8 }}>Guardar huésped</button>
             </Modal>
           )
