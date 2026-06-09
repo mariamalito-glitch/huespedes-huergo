@@ -104,7 +104,7 @@ function cardBgForHuesped(h, fecha, reg) {
   return { bg: "#1B4332", border: "1.5px solid #2D6A4F" }
 }
 
-function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDelete }) {
+function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDelete, showActionButtons = true }) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState({ ...h })
@@ -150,6 +150,7 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDele
             </div>
           )}
           {/* Botones de acción visibles siempre */}
+          {showActionButtons && (
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             {h.ingreso === fecha && !reg.ingresoMarcado && onUpdateReg && (
               <button
@@ -166,6 +167,7 @@ function HuespedCard({ h, reg = {}, fecha = TODAY, onUpdate, onUpdateReg, onDele
               </button>
             )}
           </div>
+          )}
           <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>✏ Tocá para editar</span>
             {!confirmDelete ? (
@@ -551,7 +553,8 @@ export default function App() {
                               <HuespedCard h={h} reg={registros[h.id] || {}} fecha={TODAY}
                                 onUpdate={patch => updateHuesped(h.id, patch)}
                                 onUpdateReg={patch => updateReg(h.id, patch)}
-                                onDelete={() => deleteHuesped(h.id)} />
+                                onDelete={() => deleteHuesped(h.id)}
+                                showActionButtons={false} />
                             </div>
                           ))}
                         </div>
@@ -847,7 +850,7 @@ export default function App() {
       {selectedDepto && (() => {
         const d = selectedDepto
         const hActual    = huespedesDeDepto(d.id, TODAY)
-        const hProximos  = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.ingreso && hx.ingreso > TODAY).sort((a,b) => a.ingreso.localeCompare(b.ingreso))
+        const hProximos  = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.ingreso && hx.ingreso > TODAY && hx.salida > TODAY).sort((a,b) => a.ingreso.localeCompare(b.ingreso))
         const hHistorial = huespedes.filter(hx => deptoMatch(d.id, hx.depto) && hx.salida  && hx.salida  <= TODAY && !(hx.ingreso <= TODAY && hx.salida >= TODAY)).sort((a,b) => b.salida.localeCompare(a.salida))
         const status     = deptoStatus(d.id)
 
