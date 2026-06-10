@@ -34,8 +34,17 @@ function toISODate(str) {
 }
 function findField(obj, candidates) {
   const keys = Object.keys(obj)
+  // Exact match first (case-insensitive)
   for (let c of candidates) {
-    const k = keys.find(k => k === c || k.includes(c))
+    const cl = c.toLowerCase()
+    const k = keys.find(k => k.toLowerCase() === cl)
+    if (k && obj[k]) return obj[k]
+  }
+  // Partial match only for candidates longer than 2 chars (avoids "id" matching "fecha_salida")
+  for (let c of candidates) {
+    if (c.length <= 2) continue
+    const cl = c.toLowerCase()
+    const k = keys.find(k => k.toLowerCase().includes(cl))
     if (k && obj[k]) return obj[k]
   }
   return ""
